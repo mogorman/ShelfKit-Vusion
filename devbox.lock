@@ -1,0 +1,22 @@
+{
+  "lockfile_version": "1",
+  "packages": {
+    "github:NixOS/nixpkgs/nixpkgs-unstable": {
+      "last_modified": "2026-11-10T04:36:05Z",
+      "resolved": "github:NixOS/nixpkgs/9ac0edc06bfb33e6c0000be79d98ef8d89e26503?lastModified=1794285365&narHash=sha256-wZbTou%2BANeUoN7ojuMBOPU9D4qMZ96MLxcDp2BzmIUY%3D"
+    },
+    "python312": {
+      "plugin_version": "0.0.4",
+      "resolved": "github:NixOS/nixpkgs/9ac0edc06bfb33e6c0000be79d98ef8d89e26503?narHash=sha256-wZbTou%2BANeUoN7ojuMBOPU9D4qMZ96MLxcDp2BzmIUY%3D#python312",
+      "source": "nixpkg"
+    },
+    "python312Packages.pillow": {
+      "resolved": "github:NixOS/nixpkgs/9ac0edc06bfb33e6c0000be79d98ef8d89e26503?narHash=sha256-wZbTou%2BANeUoN7ojuMBOPU9D4qMZ96MLxcDp2BzmIUY%3D#python312Packages.pillow",
+      "source": "nixpkg"
+    },
+    "python312Packages.pyserial": {
+      "resolved": "github:NixOS/nixpkgs/9ac0edc06bfb33e6c0000be79d98ef8d89e26503?narHash=sha256-wZbTou%2BANeUoN7ojuMBOPU9D4qMZ96MLxcDp2BzmIUY%3D#python312Packages.pyserial",
+      "source": "nixpkg"
+    }
+  }
+}

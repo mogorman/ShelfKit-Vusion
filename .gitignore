@@ -33,6 +33,10 @@ Release/
 Shakedown/
 dump.hex
 
-
 # AI related stuff
 .claude
+
+# Devbox local state (nix profile + the python venv it creates); keep devbox.lock tracked
+.devbox/
+.venv/
+

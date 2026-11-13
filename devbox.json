@@ -1,0 +1,9 @@
+{
+  "version": 3,
+  "packages": [
+    "path:devbox/sdcc-3.6.0#sdcc360",
+    "python312",
+    "python312Packages.pyserial",
+    "python312Packages.pillow"
+  ]
+}
