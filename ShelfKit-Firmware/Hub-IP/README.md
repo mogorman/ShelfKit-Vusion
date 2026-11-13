@@ -37,6 +37,31 @@ The GPIO numbers are in `include/config.h` (`UART_TX_PIN`, `UART_RX_PIN`,
 
 `pio run -t upload` (or the PlatformIO IDE) builds and flashes the ESP32.
 
+### ESP32-S2 Mini (WEMOS)
+
+Build the S2 Mini variant instead:
+
+```
+pio run -e esp32-s2-mini -t upload
+```
+
+It reuses the same source and protocol — only the pins differ, so the host-side
+config (token, `ws://` port) is unchanged. Wire the hub to these S2 pins (kept off
+the USB/strapping pins 0, 19, 20, 45, 46):
+
+| S2 pin  | hub pin | note |
+|---------|---------|------|
+| GPIO17 (TX) | RX (PB5) | crossed |
+| GPIO16 (RX) | TX (PB4) | crossed |
+| GPIO35  | BOOT (PB3) | |
+| GPIO36  | RESET (nRST) | |
+| 3V3     | 3V3     | |
+| GND     | GND     | |
+
+The pin map is the `[env:esp32-s2-mini]` `build_flags` in `platformio.ini`, which
+overrides the same `UART_TX_PIN`/`UART_RX_PIN`/`BOOT_PIN`/`RESET_PIN` in
+`config.h`.
+
 After that, everything in the server's UI works as it does on a cable: the hub
 pane, image pushes, and the serial bootloader **Flash** action. Flashing is the
 only place the control pins and the baud switch are used:
