@@ -15,6 +15,8 @@ ShelfKit-Server/
   shelfkit/              supporting modules, imported by it
     app.py                 panes, logs, tags, the command queue, the image push (no UI)
     serial_link.py         ports, handshake lines, the reader thread
+    wsproto.py             the just-barely-enough WebSocket (handshake + frames)
+    ws_bridge.py           a hub over IP: the ESP32 bridge, made to look like a serial port
     store.py               the SQLite state file: settings, tags, bitmaps, events
     prefs.py               the Settings values and their validation
     webapp.py              the HTTP/JSON layer over app.py
@@ -51,6 +53,26 @@ is not reflashable on a flashed board. Both are correct and they do not have to 
 - One consequence: the server's "did the board come up in its bootloader?" learning,
   which watches those lines, cannot see them at 115200. Set a pane to 38400 before
   relying on it.
+
+## Hub over IP
+
+A hub can run over Wi-Fi instead of a USB-serial cable, through an ESP32 that
+bridges its UART to a WebSocket on this host. The server is the WebSocket; the
+ESP32 dials in. Everything on this page still works — hub pane, image pushes, and
+the serial-bootloader **Flash** — because the bridge presents the hub as an
+ordinary serial port. The only place the extra machinery shows is flashing: the
+server tells the ESP32 to switch to 38400, holds BOOT and pulses RESET (the DTR/RTS
+of the flash recipe), drives the hex image over the WebSocket, then switches back.
+
+- Build and wire the ESP32 from [`../ShelfKit-Firmware/Hub-IP`](../ShelfKit-Firmware/Hub-IP).
+- Point the hub's port at the host's WebSocket URL, e.g. set the hub port to
+  `ws://<host-lan-ip>:8766` (Settings, or `hub=ws://…` on the command line).
+- Guard it with a shared token: `export SHELFKIT_HUB_TOKEN=…` on the host and the
+  same value in the ESP32's `config.h`. Leave it unset on both sides to run open.
+
+No new Python dependency: `wsproto.py` is the standard library's `socket` doing a
+WebSocket by hand. v1 limits (one hub per host, writes dropped while the ESP32 is
+reconnecting) are in that README.
 
 ## Install and run
 

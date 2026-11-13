@@ -13,6 +13,7 @@ new target adds a project without copying 140 MB of vendor code.
 | `Vusion-Hub/` | Hub | Always listening, answers every poll, relays host frames (single and batched) to the tag that just spoke, can draw on its own panel, speaks a line protocol on UART at 115200 |
 | `Tooling/` | Host scripts | The flasher, `build-all.py` (every target into `Release/`), the OTA sender, `set-id.py` and `flash-read.py` (see [Tooling/README.md](Tooling/README.md)) |
 | `Bootloader/` | AX8052 serial bootloader | Flash-resident UART bootloader (Axsem V1.1, 38400 baud, at `0xD800`) that erases and programs the application area and jumps to it, and applies an over-the-air image staged in the tag's SPI flash |
+| `Hub-IP/` | ESP32 bridge (PlatformIO, not SDCC) | Runs a hub over Wi-Fi: bridges the hub's UART to the host as a WebSocket and drives BOOT/RESET so the host can flash over IP (see its [README](Hub-IP/README.md)) |
 
 Vusion is the SES-imagotag 2.6" BWR label (UU340 variant): AX8052F143 — an 8051 core plus a
 sub-GHz radio at 26 MHz — a Good Display **GDEW026Z39** panel (296×152, black/white/red, IL0373),

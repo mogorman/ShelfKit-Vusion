@@ -48,7 +48,15 @@ def _set_line(ser, line: str, value: bool) -> bool:
 
 
 def _make_serial(spec: PortSpec):
-    """A configured but not yet opened port. Accepts pyserial URLs as well."""
+    """A configured but not yet opened port. Accepts pyserial URLs as well.
+
+    A ws:// (or wss://) port is a hub over IP: the ESP32 bridge, not a serial line.
+    It returns a per-port singleton, so the flasher's close/open-at-38400/reopen
+    all land on the same long-lived WebSocket.
+    """
+    if spec.port.startswith(("ws://", "wss://")):
+        from shelfkit import ws_bridge
+        return ws_bridge.bridge_for(spec)
     if "://" in spec.port:
         return serial.serial_for_url(
             spec.port,
