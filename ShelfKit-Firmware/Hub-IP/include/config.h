@@ -1,12 +1,19 @@
 #pragma once
-/* ShelfKit Hub-IP configuration. Set these, then flash to the ESP32. */
+/* ShelfKit Hub-IP configuration.
+ *
+ * The Wi-Fi / host / token values below are FIRST-BOOT DEFAULTS only: they seed
+ * the device's stored config once. After that, edit everything at runtime on the
+ * built-in web page (http://<esp-ip>/, or the "ShelfKit-<role>-<port>" config AP
+ * if Wi-Fi isn't up yet): role (hub/device), SSID + password, DHCP or a static
+ * IP, the WS host + port, and the token. Re-flash only to change the pin map or
+ * polarity below. */
 
-/* ── Wi-Fi (the network the ESP32 sits on) ─────────────────────────────── */
+/* ── Wi-Fi (first-boot default) ───────────────────────────────────────────── */
 const char* WIFI_SSID = "YOUR-SSID";
 const char* WIFI_PASS = "YOUR-PASSWORD";
 
-/* ── the ShelfKit host (the machine running ShelfKit-Server) ───────────── */
-/* The host listens on HOST_PORT; point SHELFKIT_HUB_TOKEN at HUB_TOKEN.    */
+/* ── the ShelfKit host (first-boot default) ───────────────────────────────── */
+/* The host listens on HOST_PORT; point SHELFKIT_HUB_TOKEN at HUB_TOKEN.       */
 const char* HOST_ADDR = "192.168.1.100";
 const int   HOST_PORT = 8766;
 const char* HUB_TOKEN = "change-me-to-match-SHELFKIT_HUB_TOKEN";

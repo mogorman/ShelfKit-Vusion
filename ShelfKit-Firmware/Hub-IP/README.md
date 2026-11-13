@@ -26,12 +26,24 @@ The GPIO numbers are in `include/config.h` (`UART_TX_PIN`, `UART_RX_PIN`,
 
 ## Configure
 
-1. `include/config.h`: set `WIFI_SSID`, `WIFI_PASS`, `HOST_ADDR` (the ShelfKit
-   host's LAN IP), and `HUB_TOKEN`.
-2. On the host, set the **same** token: `export SHELFKIT_HUB_TOKEN=...`.
-   (Leave it unset on both sides to run open, e.g. on a trusted dev box.)
-3. In the ShelfKit web UI, set the hub's port to the host's WS URL, e.g.
+All settings live on a built-in web page — no re-flash to change them.
+
+1. Flash, then find the device's address:
+   - If it can reach your Wi-Fi, it gets a DHCP IP on the LAN (or the static IP
+     you set). Open `http://<that-ip>/`.
+   - If Wi-Fi isn't set yet, it starts a config access point named
+     `ShelfKit-<hub|device>-<port>` (open, no password). Join it and open
+     `http://192.168.4.1/`.
+2. On the page set: **role** (hub or device), **SSID** + **password**, **DHCP or
+   static** IP, the **WS host** + **port**, and the **token**. *Save + reboot*.
+3. On the host, set the **same** token: `export SHELFKIT_HUB_TOKEN=...`
+   (leave it empty on both sides to run open, e.g. on a trusted dev box).
+4. In the ShelfKit web UI, set the hub's port to the host's WS URL, e.g.
    `ws://<host-lan-ip>:8766`. The host listens there and the ESP32 dials in.
+
+`include/config.h` only holds the *first-boot* defaults (Wi-Fi/host/token) plus
+the board's pin map and control-line polarity. Once it has booted once, the
+stored config wins — the page is the source of truth.
 
 ## Flash
 

@@ -40,3 +40,7 @@ dump.hex
 .devbox/
 .venv/
 
+# PlatformIO build + library dirs (ESP32 Hub-IP firmware)
+.pio/
+.piolibdeps/
+
