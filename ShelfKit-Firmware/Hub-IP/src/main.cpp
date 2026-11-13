@@ -120,6 +120,9 @@ static String page() {
        "<input type=submit value=Reboot module></form> ";
   h += "<form method=post action=/device-reboot style=display:inline>"
        "<input type=submit value=Reboot device></form></p>";
+  h += "<p><form method=post action=/factory-reset style=display:inline>"
+       "<input type=submit value=Factory reset style=border-color:#b00></form> "
+       "wipes all settings and reboots to the config AP</p>";
   h += "</body></html>";
   return h;
 }
@@ -154,6 +157,13 @@ static void rebootDevice() {          // pulse the hub's RESET to restart the wh
   delay(100);
   digitalWrite(RESET_PIN, RESET_IDLE_LEVEL);
   server.send(200, "text/plain", "Rebooting device...");
+}
+
+static void factoryReset() {          // wipe all stored config -> back to the config AP
+  prefs.clear();
+  server.send(200, "text/plain", "Factory reset. Rebooting...");
+  delay(300);
+  ESP.restart();
 }
 
 // ── the bridge ───────────────────────────────────────────────────────────────
@@ -222,6 +232,7 @@ void setup() {
   server.on("/config", HTTP_POST, handleConfig);
   server.on("/reboot", HTTP_POST, rebootModule);
   server.on("/device-reboot", HTTP_POST, rebootDevice);
+  server.on("/factory-reset", HTTP_POST, factoryReset);
   server.begin();
 }
 
