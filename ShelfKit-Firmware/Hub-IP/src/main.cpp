@@ -149,24 +149,105 @@ static void handleConfig() {
   ESP.restart();
 }
 
-static void rebootModule() {          // restart this ESP32
-  server.send(200, "text/plain", "Rebooting module...");
+// ── actions shared by the web page and the serial console ───────────────────
+static void doRestart() {             // restart this ESP32
   delay(300);
   ESP.restart();
 }
 
-static void rebootDevice() {          // pulse the hub's RESET to restart the whole device
+static void doDeviceReset() {         // pulse the hub's RESET, coming back in firmware
+  digitalWrite(BOOT_PIN, BOOT_IDLE_LEVEL);   // release BOOT so the firmware runs
   digitalWrite(RESET_PIN, RESET_ACTIVE_LEVEL);
   delay(100);
   digitalWrite(RESET_PIN, RESET_IDLE_LEVEL);
+}
+
+static void doEnterBootloader() {     // hold BOOT through a reset (the flasher's recipe)
+  digitalWrite(RESET_PIN, RESET_IDLE_LEVEL);
+  digitalWrite(BOOT_PIN, BOOT_ACTIVE_LEVEL);
+  digitalWrite(RESET_PIN, RESET_ACTIVE_LEVEL);
+  delay(100);
+  digitalWrite(RESET_PIN, RESET_IDLE_LEVEL);
+  delay(100);
+  digitalWrite(BOOT_PIN, BOOT_IDLE_LEVEL);
+}
+
+static void doFactoryReset() {        // wipe all stored config -> back to config mode
+  prefs.clear();
+}
+
+static void rebootModule() {          // web
+  server.send(200, "text/plain", "Rebooting module...");
+  doRestart();
+}
+
+static void rebootDevice() {          // web
+  doDeviceReset();
   server.send(200, "text/plain", "Rebooting device...");
 }
 
-static void factoryReset() {          // wipe all stored config -> back to the config AP
-  prefs.clear();
+static void factoryReset() {          // web
   server.send(200, "text/plain", "Factory reset. Rebooting...");
-  delay(300);
-  ESP.restart();
+  doFactoryReset();
+  doRestart();
+}
+
+// ── serial debug console (a mirror of the web page) ─────────────────────────
+// Line commands on Serial: on the S2 that is the USB port (CDC on boot), on a
+// classic ESP32 it is UART0. Reads the same state and fires the same actions as
+// the page, so you can debug without a browser.
+static String lineBuf;
+
+static void printStatus() {
+  bool onAp = apMode && WiFi.status() != WL_CONNECTED;
+  IPAddress shown = onAp ? WiFi.softAPIP() : WiFi.localIP();
+  Serial.print("wifi=");   Serial.print(WiFi.status() == WL_CONNECTED ? "up" : "down");
+  Serial.print(" ws=");    Serial.print(wsConnected ? "up" : "down");
+  Serial.print(" ");       Serial.print(onAp ? "config AP " : "ip ");
+  Serial.println(String(shown));
+}
+
+static void printConfig() {
+  Serial.print("role=");  Serial.println(cfg.role ? "device" : "hub");
+  Serial.print("ssid=");  Serial.println(cfg.ssid);
+  Serial.print("ip=");    Serial.print(cfg.use_static ? "static " : "dhcp ");
+  Serial.print(cfg.ip);   Serial.print('/'); Serial.print(cfg.gw);
+  Serial.print('/');      Serial.println(cfg.subnet);
+  Serial.print("ws=");    Serial.print(cfg.host); Serial.print(':'); Serial.println(cfg.host_port);
+  Serial.print("token="); Serial.println(cfg.token);
+}
+
+static void printHelp() {
+  Serial.println("commands:");
+  Serial.println("  status   wifi/ws/ip");
+  Serial.println("  config   current settings");
+  Serial.println("  reset    reboot the device (comes up in firmware)");
+  Serial.println("  boot     enter the hub's serial bootloader");
+  Serial.println("  reboot   reboot this module");
+  Serial.println("  factory  wipe settings, reboot to config mode");
+}
+
+static void serialCommand(String c) {
+  c.trim();
+  if (c == "status")                      printStatus();
+  else if (c == "config" || c == "show")  printConfig();
+  else if (c == "reset" || c == "device") { doDeviceReset();     Serial.println("device reset (firmware)"); }
+  else if (c == "boot" || c == "flash")   { doEnterBootloader(); Serial.println("hub reset into the serial bootloader"); }
+  else if (c == "reboot")                 { Serial.println("rebooting module..."); doRestart(); }
+  else if (c == "factory")                { Serial.println("factory reset...");    doFactoryReset(); doRestart(); }
+  else if (c == "help")                   printHelp();
+  else if (c.length())                    Serial.println("unknown '" + c + "' (try: help)");
+}
+
+static void serialConsume() {
+  while (Serial.available()) {
+    char ch = (char)Serial.read();
+    if (ch == '\n' || ch == '\r') {
+      if (lineBuf.length()) { serialCommand(lineBuf); lineBuf = ""; }
+    } else if (lineBuf.length() < 60) {
+      lineBuf += ch;
+    }
+  }
 }
 
 // ── the bridge ───────────────────────────────────────────────────────────────
@@ -218,6 +299,7 @@ static void onEvent(WStype_t type, uint8_t* payload, size_t length) {
 }
 
 void setup() {
+  Serial.begin(115200);            // debug console (USB on the S2, UART0 elsewhere)
   // Start the dedicated hub UART (crossed: our TX -> its RX).
   hubUart.begin(115200, SERIAL_8N1, UART_RX_PIN, UART_TX_PIN);
   pinMode(BOOT_PIN, OUTPUT);
@@ -235,6 +317,12 @@ void setup() {
     startAp();                  // config mode: present the portal right away
   }
 
+  Serial.println();
+  Serial.println("ShelfKit " + String(cfg.role ? "device" : "hub") + " (hub-IP)");
+  printConfig();
+  printStatus();
+  Serial.println("type 'help' for commands");
+
   server.on("/", HTTP_GET, []() { server.send(200, "text/html", page()); });
   server.on("/config", HTTP_POST, handleConfig);
   server.on("/reboot", HTTP_POST, rebootModule);
@@ -246,6 +334,7 @@ void setup() {
 void loop() {
   uint32_t now = millis();
   server.handleClient();
+  serialConsume();
 
   if (now - lastWifi > 3000) {
     lastWifi = now;

@@ -94,6 +94,25 @@ UART dials a *different* host port, and both run at once as independent bridges:
 
 The hub and tag must use *different* host ports; the same URL is one shared bridge.
 
+## Serial console (debugging)
+
+A small command console on `Serial` mirrors the web page — on the S2 Mini that's
+the USB port (CDC on boot), on a classic ESP32 it's UART0. Open a serial monitor
+at 115200; it prints the settings and status at boot, then:
+
+| command  | does (same as the page / flasher)                       |
+|----------|----------------------------------------------------------|
+| `status` | wifi / ws / ip                                            |
+| `config` | the current settings                                      |
+| `reset`  | reboot the device, coming up in **firmware**              |
+| `boot`   | hold BOOT through a reset → the hub's **serial bootloader** |
+| `reboot` | reboot this module                                        |
+| `factory`| wipe settings, reboot to config mode                      |
+
+`boot` and `reset` are the same control-line triggers the host's flasher drives
+over the WebSocket (`{"boot"}`/`{"reset"}`), so the whole flash flow still works
+over IP; these just let you fire them by hand while debugging.
+
 ## Bench-verify
 
 `BOOT_ACTIVE_LEVEL` / `RESET_ACTIVE_LEVEL` in `config.h` are the two values to
