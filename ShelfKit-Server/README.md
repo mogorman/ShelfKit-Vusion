@@ -67,12 +67,14 @@ of the flash recipe), drives the hex image over the WebSocket, then switches bac
 - Build and wire the ESP32 from [`../ShelfKit-Firmware/Hub-IP`](../ShelfKit-Firmware/Hub-IP).
 - Point the hub's port at the host's WebSocket URL, e.g. set the hub port to
   `ws://<host-lan-ip>:8766` (Settings, or `hub=ws://…` on the command line).
+- The tag debug port works the same way: a second ESP32 on a *different* port,
+  e.g. `tag=ws://<host-lan-ip>:8767`. Both run at once as independent bridges.
 - Guard it with a shared token: `export SHELFKIT_HUB_TOKEN=…` on the host and the
   same value in the ESP32's `config.h`. Leave it unset on both sides to run open.
 
 No new Python dependency: `wsproto.py` is the standard library's `socket` doing a
-WebSocket by hand. v1 limits (one hub per host, writes dropped while the ESP32 is
-reconnecting) are in that README.
+WebSocket by hand. v1 limits (one ESP32 per host port, writes dropped while an
+ESP32 is reconnecting) are in that README.
 
 ## Install and run
 

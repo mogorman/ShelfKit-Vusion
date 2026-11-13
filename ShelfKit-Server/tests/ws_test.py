@@ -232,11 +232,53 @@ def test_worker_over_bridge() -> None:
     hub.close()
 
 
+def test_two_bridges_independent() -> None:
+    """A hub and a tag can each ride their own ESP32 on their own port at once."""
+    hub_url = f"ws://127.0.0.1:{free_port()}"
+    tag_url = f"ws://127.0.0.1:{free_port()}"
+    hub_bridge = ws_bridge.bridge_for(PortSpec("hub", hub_url))
+    tag_bridge = ws_bridge.bridge_for(PortSpec("tag", tag_url))
+    check("two URLs are two independent bridges", hub_bridge is not tag_bridge)
+    check("the same URL is the same bridge (singleton)",
+          ws_bridge.bridge_for(PortSpec("hub", hub_url)) is hub_bridge)
+
+    hub_bridge.open()
+    tag_bridge.open()
+    hub = FakeHub(int(hub_url.rsplit(":", 1)[1]))
+    tag = FakeHub(int(tag_url.rsplit(":", 1)[1]))
+    time.sleep(0.1)
+
+    hub_bridge.write(b"HUB-BYTE")
+    tag_bridge.write(b"TAG-BYTE")
+    check("the hub bridge reaches its own ESP32", hub.recv_binary() == b"HUB-BYTE")
+    check("the tag bridge reaches its own ESP32", tag.recv_binary() == b"TAG-BYTE")
+
+    hub_want = b"from the hub"
+    tag_want = b"from the tag"
+    hub.send_binary(hub_want)
+    tag.send_binary(tag_want)
+    deadline = time.time() + 3
+    hub_got = b""
+    while len(hub_got) < len(hub_want) and time.time() < deadline:
+        hub_got += hub_bridge.read(len(hub_want) - len(hub_got))
+    tag_got = b""
+    while len(tag_got) < len(tag_want) and time.time() < deadline:
+        tag_got += tag_bridge.read(len(tag_want) - len(tag_got))
+    check("the hub reads only its own bytes", hub_got == hub_want, hub_got)
+    check("the tag reads only its own bytes", tag_got == tag_want, tag_got)
+
+    hub_bridge.close()
+    tag_bridge.close()
+    hub.close()
+    tag.close()
+
+
 def main() -> int:
     test_protocol()
     test_bridge_control()
     test_token_guard()
     test_worker_over_bridge()
+    test_two_bridges_independent()
     print("\nRESULT:", "PASS" if not FAILED else f"FAIL {FAILED}")
     return 0 if not FAILED else 1
 

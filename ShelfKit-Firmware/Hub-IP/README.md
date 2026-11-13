@@ -45,6 +45,19 @@ only place the control pins and the baud switch are used:
 - holds BOOT and pulses RESET (the DTR/RTS of the flash recipe),
 - drives the Intel-hex image over the WebSocket, then `{"baud":115200}` on the way back.
 
+## Running the tag too (both wireless)
+
+The tag debug port rides the exact same bridge. A second ESP32 wired to the tag's
+UART dials a *different* host port, and both run at once as independent bridges:
+
+- Flash a second copy of this project with `HOST_PORT 8767` and the tag's wiring
+  (its `BOOT` is PB3, active-low; `RESET` is its nRST — see `../Vusion/README.md`).
+- On the host, set the tag port to `ws://0.0.0.0:8767` (Settings → tag port, or
+  `tag=ws://0.0.0.0:8767` on the command line).
+- Same `HUB_TOKEN` on both ESP32s and `SHELFKIT_HUB_TOKEN` on the host.
+
+The hub and tag must use *different* host ports; the same URL is one shared bridge.
+
 ## Bench-verify
 
 `BOOT_ACTIVE_LEVEL` / `RESET_ACTIVE_LEVEL` in `config.h` are the two values to
