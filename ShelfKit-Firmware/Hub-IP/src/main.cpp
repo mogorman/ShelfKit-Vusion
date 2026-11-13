@@ -116,6 +116,10 @@ static String page() {
        " &middot; " + (onAp ? "config AP: " : "IP: ") +
        String(shown) + "</p>";
   h += "<p><input type=submit value=Save + reboot></form>";
+  h += "<p><form method=post action=/reboot style=display:inline>"
+       "<input type=submit value=Reboot module></form> ";
+  h += "<form method=post action=/device-reboot style=display:inline>"
+       "<input type=submit value=Reboot device></form></p>";
   h += "</body></html>";
   return h;
 }
@@ -137,6 +141,19 @@ static void handleConfig() {
   server.send(200, "text/plain", "Saved. Rebooting...");
   delay(300);
   ESP.restart();
+}
+
+static void rebootModule() {          // restart this ESP32
+  server.send(200, "text/plain", "Rebooting module...");
+  delay(300);
+  ESP.restart();
+}
+
+static void rebootDevice() {          // pulse the hub's RESET to restart the whole device
+  digitalWrite(RESET_PIN, RESET_ACTIVE_LEVEL);
+  delay(100);
+  digitalWrite(RESET_PIN, RESET_IDLE_LEVEL);
+  server.send(200, "text/plain", "Rebooting device...");
 }
 
 // ── the bridge ───────────────────────────────────────────────────────────────
@@ -203,6 +220,8 @@ void setup() {
 
   server.on("/", HTTP_GET, []() { server.send(200, "text/html", page()); });
   server.on("/config", HTTP_POST, handleConfig);
+  server.on("/reboot", HTTP_POST, rebootModule);
+  server.on("/device-reboot", HTTP_POST, rebootDevice);
   server.begin();
 }
 
