@@ -19,6 +19,7 @@
 struct Cfg {
   uint8_t  role;        // 0 = hub, 1 = device
   uint8_t  use_static;  // 1 = apply the ip/gw/subnet below
+  uint8_t  configured;  // 1 = set up; 0 = present the config AP (config mode)
   char     ssid[33];
   char     pass[65];
   char     ip[16];
@@ -49,9 +50,10 @@ static void loadCfg() {
   if (prefs.getBytes("c", &cfg, sizeof cfg) == sizeof cfg && cfg.magic == CFG_MAGIC) {
     return;   // prefs stay open for saveCfg()
   }
-  // first boot: seed from the compile-time defaults in config.h
+  // first boot: seed defaults, marked not-yet-configured -> straight into config mode
   cfg.role       = 0;
   cfg.use_static = 0;
+  cfg.configured = 0;
   snprintf(cfg.ssid,   sizeof cfg.ssid,   "%s", WIFI_SSID);
   snprintf(cfg.pass,   sizeof cfg.pass,   "%s", WIFI_PASS);
   snprintf(cfg.ip,     sizeof cfg.ip,     "%s", "192.168.1.50");
@@ -130,6 +132,7 @@ static String page() {
 static void handleConfig() {
   cfg.role       = server.arg("role") == "1" ? 1 : 0;
   cfg.use_static = server.arg("net") == "1" ? 1 : 0;
+  cfg.configured = 1;
   snprintf(cfg.ssid,   sizeof cfg.ssid,   "%s", server.arg("ssid").c_str());
   snprintf(cfg.pass,   sizeof cfg.pass,   "%s", server.arg("pass").c_str());
   snprintf(cfg.ip,     sizeof cfg.ip,     "%s", server.arg("ip").c_str());
@@ -225,8 +228,12 @@ void setup() {
   loadCfg();
   ws.onEvent(onEvent);
 
-  WiFi.mode(WIFI_STA);
-  connectWifi();
+  if (cfg.configured) {
+    WiFi.mode(WIFI_STA);
+    connectWifi();
+  } else {
+    startAp();                  // config mode: present the portal right away
+  }
 
   server.on("/", HTTP_GET, []() { server.send(200, "text/html", page()); });
   server.on("/config", HTTP_POST, handleConfig);
@@ -243,11 +250,13 @@ void loop() {
   if (now - lastWifi > 3000) {
     lastWifi = now;
     if (WiFi.status() != WL_CONNECTED) {
-      if (!apMode && now - lastAp > 8000) {
-        lastAp = now;
-        startAp();                        // no Wi-Fi yet: offer a config portal
+      if (cfg.configured) {
+        if (!apMode && now - lastAp > 8000) {
+          lastAp = now;
+          startAp();                      // configured but no Wi-Fi: fall back to a portal
+        }
+        connectWifi();                    // keep the STA side trying to connect
       }
-      connectWifi();                      // keep the STA side trying to connect
     }
   }
   if (WiFi.status() == WL_CONNECTED && !wsConnected && now - lastWs > 2000) {

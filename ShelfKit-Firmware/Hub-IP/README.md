@@ -28,14 +28,13 @@ The GPIO numbers are in `include/config.h` (`UART_TX_PIN`, `UART_RX_PIN`,
 
 All settings live on a built-in web page — no re-flash to change them.
 
-1. Flash, then find the device's address:
-   - If it can reach your Wi-Fi, it gets a DHCP IP on the LAN (or the static IP
-     you set). Open `http://<that-ip>/`.
-   - If Wi-Fi isn't set yet, it starts a config access point named
-     `ShelfKit-<hub|device>-<port>` (open, no password). Join it and open
-     `http://192.168.4.1/`.
-2. On the page set: **role** (hub or device), **SSID** + **password**, **DHCP or
-   static** IP, the **WS host** + **port**, and the **token**. *Save + reboot*.
+1. On **first boot** (or after *Factory reset*) the module goes straight into
+   **config mode**: it starts an access point named `ShelfKit-<hub|device>-<port>`
+   (open, no password). Join it and open `http://192.168.4.1/`.
+2. Set: **role** (hub or device), **SSID** + **password**, **DHCP or static** IP,
+   the **WS host** + **port**, and the **token**. *Save + reboot*. It now connects
+   to your Wi-Fi, and the page is reachable at its LAN IP (DHCP) or the static IP
+   you set — the config AP only reappears later if Wi-Fi is ever unreachable.
 3. On the host, set the **same** token: `export SHELFKIT_HUB_TOKEN=...`
    (leave it empty on both sides to run open, e.g. on a trusted dev box).
 4. In the ShelfKit web UI, set the hub's port to the host's WS URL, e.g.
