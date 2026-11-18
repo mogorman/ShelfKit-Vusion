@@ -8,11 +8,30 @@ import serial.tools.list_ports
 from tqdm import tqdm
 
 class AxsemFlasher:
-    def __init__(self, port, baudrate=38400, timeout=1):
+    def __init__(self, port, baudrate=38400, timeout=1,
+                 open_loop=False, erase_wait=3.0, boot_low=True, line_delay=0.01,
+                 timing=False):
         self.port = port
         self.baudrate = baudrate
         self.timeout = timeout
         self.serial = None
+        # open_loop: the board has no TX wired back to us, so we never read its
+        # replies. The bootloader is synchronous per command (it finishes the
+        # erase / each hex write before it reads the next char), so we just wait
+        # a safe fixed time after "K" and send hex with a small per-line delay.
+        self.open_loop = open_loop
+        self.erase_wait = erase_wait
+        self.boot_low = boot_low
+        self.line_delay = line_delay
+        # timing: stamp the boot edges, banner arrival and the real K->OK erase
+        # duration, so a TX-wired unit can be used to measure the waits the
+        # open-loop unit has to hard-code.
+        self.timing = timing
+        self.t0 = None
+
+    def _stamp(self, label):
+        if self.timing and self.t0 is not None:
+            print(f"  [{time.monotonic() - self.t0:7.3f}s] {label}", flush=True)
     
     def open(self):
         try:
@@ -43,19 +62,23 @@ class AxsemFlasher:
         self.serial.rts = state
     
     def enter_boot_mode(self):
+        # main.c:784 runs the app only when BOOT (PB3) is HIGH at reset, so hold
+        # it low during the reset pulse to force the bootloader. The 2.6" board
+        # used a fixed DTR-high here because its DTR-to-PB3 path is inverted;
+        # flip --boot-high for a jig that inverts the line the other way.
         print("Entering boot mode...")
-        # Set boot pin high (DTR)
+        self.t0 = time.monotonic()
+        self._stamp("reset low")
         self.set_reset_pin(False)
-        self.set_boot_pin(True)
-        
-        # Toggle reset
+        self._stamp(f"boot {'low' if self.boot_low else 'high'}")
+        self.set_boot_pin(not self.boot_low)
+        self._stamp("reset pulse (high)")
         self.set_reset_pin(True)
         time.sleep(0.1)
+        self._stamp("reset release")
         self.set_reset_pin(False)
-        
         time.sleep(0.1)
-        
-        # Release boot pin
+        self._stamp("boot release")
         self.set_boot_pin(False)
     
     def get_banner(self):
@@ -68,9 +91,17 @@ class AxsemFlasher:
         print("Validating bootloader...")
         if not self.open():
             return False
-        
+
         self.enter_boot_mode()
+        if self.open_loop:
+            # no TX to read the banner from; the reset above put it in the
+            # bootloader, so give the FRC calibration a moment and trust it.
+            print("open-loop: no banner check (no TX wired back)")
+            time.sleep(0.5)
+            return True
+
         banner = self.get_banner()
+        self._stamp("banner received")
         print(f"Banner received: {banner}")
         
         if "Bootloader" in banner:
@@ -83,7 +114,21 @@ class AxsemFlasher:
     def erase_application(self):
         print("Erasing application...")
         self.serial.write(b"K")
+        if self.open_loop:
+            # the bootloader finishes the whole erase before it reads the next
+            # char, so a fixed wait is safe; ~0.2-0.4s worst case, use a margin.
+            print(f"open-loop: waiting {self.erase_wait}s for erase (no OK to read)")
+            time.sleep(self.erase_wait)
+            return True
+        t_k = time.monotonic()
         response = self.serial.readline().decode('utf-8', errors='ignore').strip()
+        if self.timing:
+            dur = time.monotonic() - t_k
+            # round up to the next 0.5s and add headroom: this is the value the
+            # open-loop unit must wait after K before it can safely send hex.
+            import math
+            rec = math.ceil((dur + 0.5) * 2) / 2
+            self._stamp(f"erase OK in {dur:.3f}s -> open-loop --erase-wait {rec}")
         return "OK" in response
     
     def run_application(self):
@@ -93,8 +138,8 @@ class AxsemFlasher:
     
     def program_hex_line(self, line):
         self.serial.write((line + '\n').encode())
-        time.sleep(0.01)  # Small delay after writing each line
-        return True
+        time.sleep(self.line_delay)  # the bootloader writes each line before
+        return True                   # reading the next; keep a small gap
     
     def program_hex_file(self, hex_file_path):
         if not os.path.exists(hex_file_path):
@@ -153,20 +198,38 @@ def main():
     parser.add_argument('-b', '--baudrate', type=int, default=38400,
                         help='Baudrate of the bootloader (default: 38400)')
     parser.add_argument('-l', '--list', action='store_true', help='List available serial ports')
-    
+    parser.add_argument('--open-loop', action='store_true',
+                        help='board has no TX wired back: never read replies, '
+                             'use fixed waits (RX-only flasher)')
+    parser.add_argument('--erase-wait', type=float, default=3.0,
+                        help='open-loop seconds to wait after K (default: 3.0)')
+    parser.add_argument('--boot-high', action='store_true',
+                        help='drive BOOT (PB3) high during reset instead of low; '
+                             'use if your jig inverts the line')
+    parser.add_argument('--line-delay', type=float, default=0.01,
+                        help='open-loop seconds between hex lines (default: 0.01)')
+    parser.add_argument('--timing', action='store_true',
+                        help='stamp boot edges + banner + K->OK erase duration '
+                             '(use on a TX-wired unit to size the open-loop waits)')
+
     args = parser.parse_args()
-    
+
     if args.list:
         list_ports()
         return 0
-    
+
     if not args.hex_file or not args.port:
         parser.print_help()
         return 1
-    
-    flasher = AxsemFlasher(args.port, args.baudrate)
+
+    flasher = AxsemFlasher(args.port, args.baudrate,
+                           open_loop=args.open_loop,
+                           erase_wait=args.erase_wait,
+                           boot_low=not args.boot_high,
+                           line_delay=args.line_delay,
+                           timing=args.timing)
     success = flasher.flash(args.hex_file)
-    
+
     return 0 if success else 1
 
 if __name__ == "__main__":

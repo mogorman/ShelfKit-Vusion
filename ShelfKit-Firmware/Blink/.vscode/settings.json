@@ -1,0 +1,4 @@
+{
+    "sdcc.boardsDir": "../Shared/boards",
+    "sdcc.monitorBaud": 38400
+}

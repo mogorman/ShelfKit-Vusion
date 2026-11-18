@@ -64,7 +64,7 @@ BUILD_LOG = FIRMWARE / "build-log.md"
 SDCC_DIRS = [Path(r"C:\Program Files\SDCC\bin"), Path(r"C:\Program Files (x86)\SDCC\bin")]
 SOURCE_SUFFIXES = {".c", ".asm"}
 # folder name -> the name you pass to --targets
-TARGETS = {"vusion": "Vusion", "hub": "Vusion-Hub", "bootloader": "Bootloader"}
+TARGETS = {"vusion": "Vusion", "hub": "Vusion-Hub", "bootloader": "Bootloader", "blink": "Blink"}
 # shelfota.h OTA_MAX_IMAGE: an application bigger than this cannot be sent over the
 # air, even though it still fits when flashed over the wire.
 OTA_IMAGE_WINDOW = 0xA7F0
@@ -269,8 +269,8 @@ def verify_stamp(rows: list[dict], version: dict) -> bool:
     wanted = (version["major"], version["minor"], version["patch"], version["build"])
     good = True
     for row in rows:
-        if row["target"] == "Bootloader":
-            continue                    # it has no version of its own
+        if row["target"] in ("Bootloader", "Blink"):
+            continue                    # the bootloader and the blink have no version of their own
         found = find_marker(read_hex(row["hex"]))
         if found != wanted:
             print(f"\n!!! {row['hex'].name}: version marker is {found}, expected {wanted}")

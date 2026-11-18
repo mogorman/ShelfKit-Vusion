@@ -1,0 +1,19 @@
+{
+  "name": "Blink",
+  "board": "axsem-8052f143",
+  "sources": [
+    "src"
+  ],
+  "includes": [
+    "../Shared/sdk/libmf/include"
+  ],
+  "defines": [],
+  "libraries": [
+    "../Shared/lib"
+  ],
+  "build": {
+    "output_dir": "build",
+    "output_name": "blink",
+    "hooks": {}
+  }
+}
