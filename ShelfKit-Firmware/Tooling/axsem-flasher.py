@@ -288,11 +288,42 @@ def main():
     parser.add_argument('--settle', type=float, default=0.1,
                         help='seconds to wait for a DTR/RTS change to reach the pin '
                              'before the next edge (raise if boot still misses on a slow adapter)')
+    parser.add_argument('--set-dtr', type=int, choices=[0, 1],
+                        help='pin-test: hold DTR at this level so you can measure '
+                             'PB3 with a multimeter (implies pin-test)')
+    parser.add_argument('--set-rts', type=int, choices=[0, 1],
+                        help='pin-test: hold RTS at this level so you can measure '
+                             'the board reset pin (implies pin-test)')
+    parser.add_argument('--hold', type=float, default=5.0,
+                        help='pin-test: seconds to hold the pins before releasing (default 5.0)')
 
     args = parser.parse_args()
 
     if args.list:
         list_ports()
+        return 0
+
+    if args.set_dtr is not None or args.set_rts is not None:
+        # Pin test: drive DTR/RTS to a known level and hold it, so the board's
+        # PB3 (DTR) and reset (RTS) can be measured with a multimeter to confirm
+        # the adapter actually reaches those pins.
+        if not args.port:
+            parser.error("pin-test needs -p PORT")
+        pins = AxsemFlasher(args.port, args.baudrate)
+        if not pins.open():
+            return 1
+        dtr = args.set_dtr if args.set_dtr is not None else 0
+        rts = args.set_rts if args.set_rts is not None else 0
+        pins.set_boot_pin(bool(dtr))
+        pins.set_reset_pin(bool(rts))
+        print(f"Holding DTR={dtr} RTS={rts} for {args.hold:.1f}s -- measure now, "
+              f"against BOARD ground: DTR is on PB3 (BOOT), RTS is on the reset pin.")
+        print("If PB3 tracks DTR (0 -> ~0 V, 1 -> ~3.3/5 V) the wire works; if it "
+              f"doesn't move, DTR isn't reaching PB3.")
+        time.sleep(args.hold)
+        pins.set_boot_pin(False)
+        pins.set_reset_pin(False)
+        pins.close()
         return 0
 
     if args.probe:
