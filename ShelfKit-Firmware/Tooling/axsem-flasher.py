@@ -296,6 +296,10 @@ def main():
                              'the board reset pin (implies pin-test)')
     parser.add_argument('--hold', type=float, default=5.0,
                         help='pin-test: seconds to hold the pins before releasing (default 5.0)')
+    parser.add_argument('--listen', type=float, metavar='SECONDS',
+                        help='open the port and print every byte for SECONDS, no pin '
+                             'activity. Use -b 115200 for the app log, 38400 for the bootloader; '
+                             'power-cycle the board while it runs to catch its boot log')
 
     args = parser.parse_args()
 
@@ -324,6 +328,28 @@ def main():
         pins.set_boot_pin(False)
         pins.set_reset_pin(False)
         pins.close()
+        return 0
+
+    if args.listen is not None:
+        if not args.port:
+            parser.error("--listen needs -p PORT")
+        lis = AxsemFlasher(args.port, args.baudrate)
+        if not lis.open():
+            return 1
+        print(f"Listening on {args.port} @ {args.baudrate} 8N1 for {args.listen:.0f}s -- "
+              f"power-cycle the board now to catch its boot log "
+              f"(app logs at 115200, bootloader banner at 38400). Ctrl-C stops early.")
+        try:
+            end = time.monotonic() + args.listen
+            while time.monotonic() < end:
+                data = lis.serial.read(256)
+                if data:
+                    sys.stdout.write(data.decode('utf-8', errors='replace'))
+                    sys.stdout.flush()
+        except KeyboardInterrupt:
+            pass
+        print("\n[done]")
+        lis.close()
         return 0
 
     if args.probe:
