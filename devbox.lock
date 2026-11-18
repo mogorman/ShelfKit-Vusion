@@ -13,6 +13,10 @@
       "last_modified": "1970-01-01T00:00:00Z",
       "resolved": "github:NixOS/nixpkgs/9ac0edc06bfb33e6c0000be79d98ef8d89e26503#python312Packages.pyserial"
     },
+    "github:NixOS/nixpkgs/9ac0edc06bfb33e6c0000be79d98ef8d89e26503#python312Packages.tqdm": {
+      "last_modified": "1970-01-01T00:00:00Z",
+      "resolved": "github:NixOS/nixpkgs/9ac0edc06bfb33e6c0000be79d98ef8d89e26503#python312Packages.tqdm"
+    },
     "github:NixOS/nixpkgs/nixpkgs-unstable": {
       "last_modified": "2026-11-10T04:36:05Z",
       "resolved": "github:NixOS/nixpkgs/9ac0edc06bfb33e6c0000be79d98ef8d89e26503?lastModified=1794285365&narHash=sha256-wZbTou%2BANeUoN7ojuMBOPU9D4qMZ96MLxcDp2BzmIUY%3D"

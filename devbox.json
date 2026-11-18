@@ -4,6 +4,7 @@
     "path:devbox/sdcc-3.6.0#sdcc360",
     "github:NixOS/nixpkgs/9ac0edc06bfb33e6c0000be79d98ef8d89e26503#python312",
     "github:NixOS/nixpkgs/9ac0edc06bfb33e6c0000be79d98ef8d89e26503#python312Packages.pyserial",
-    "github:NixOS/nixpkgs/9ac0edc06bfb33e6c0000be79d98ef8d89e26503#python312Packages.pillow"
+    "github:NixOS/nixpkgs/9ac0edc06bfb33e6c0000be79d98ef8d89e26503#python312Packages.pillow",
+    "github:NixOS/nixpkgs/9ac0edc06bfb33e6c0000be79d98ef8d89e26503#python312Packages.tqdm"
   ]
 }
