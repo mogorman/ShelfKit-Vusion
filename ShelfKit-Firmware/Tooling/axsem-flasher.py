@@ -76,28 +76,32 @@ class AxsemFlasher:
         print("Entering boot mode...")
         self.t0 = time.monotonic()
         if self.dtr_off:
-            # Leave DTR (BOOT/PB3) alone; pulse only nRST. BOOT is forced low
+            # Leave DTR (BOOT/PB3) alone; pulse only reset. BOOT is forced low
             # externally (a phone held on the NFC area drives PB3 low = the boot state).
+            # Reset is active-high here (rts True = assert, False = idle); end idle.
             self._stamp("dtr-off: reset pulse only (BOOT forced externally)")
-            self.set_reset_pin(True)
-            time.sleep(self.settle)
             self.set_reset_pin(False)
             time.sleep(self.settle)
             self.set_reset_pin(True)
             time.sleep(self.settle)
+            self.set_reset_pin(False)
+            time.sleep(self.settle)
             return
-        # nRST is active-low: rts low = held in reset, rts high = released/boot.
-        # Hold in reset first and let it settle, then set BOOT (DTR) and let THAT
-        # settle, and only then release reset so the board samples PB3 in the boot
-        # state. The settle gaps are the fix for boards where DTR lags the reset edge.
-        self._stamp("reset held (nRST low)")
+        # Reset is active-high on this rig (rts True = assert, False = idle), so the
+        # board is left RUNNING (idle) at the end -- never held in reset. Set BOOT
+        # (DTR), let it settle, pulse reset, then release back to idle so the chip
+        # samples PB3 in the boot state and boots into the bootloader.
+        self._stamp("reset idle")
         self.set_reset_pin(False)
         time.sleep(self.settle)
         self._stamp(f"boot {'low' if self.boot_low else 'high'}")
         self.set_boot_pin(not self.boot_low)
-        time.sleep(self.settle)
-        self._stamp("reset released -> boot")
+        time.sleep(self.settle)      # let DTR reach PB3 before the reset edge
+        self._stamp("reset pulse")
         self.set_reset_pin(True)
+        time.sleep(self.settle)      # hold in reset while BOOT is stable
+        self._stamp("reset release -> boot")
+        self.set_reset_pin(False)    # end idle; chip boots into the bootloader
         time.sleep(0.1)
         self._stamp("boot release")
         self.set_boot_pin(False)
