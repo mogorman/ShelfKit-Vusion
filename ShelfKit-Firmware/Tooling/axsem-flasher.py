@@ -10,7 +10,7 @@ from tqdm import tqdm
 class AxsemFlasher:
     def __init__(self, port, baudrate=38400, timeout=1,
                  open_loop=False, erase_wait=3.0, boot_low=True, line_delay=0.01,
-                 timing=False, dtr_off=False):
+                 timing=False, dtr_off=False, settle=0.1):
         self.port = port
         self.baudrate = baudrate
         self.timeout = timeout
@@ -30,6 +30,10 @@ class AxsemFlasher:
         # dtr_off: don't drive DTR (BOOT/PB3) in the pin dance; pulse reset only.
         # Use when BOOT is forced low externally (a phone on the NFC area drives PB3 low).
         self.dtr_off = dtr_off
+        # settle: seconds to let a DTR/RTS change actually reach the pin before the
+        # next edge. USB-serial adapters lag pyserial by a few ms; without this the
+        # board samples PB3 before DTR has propagated and always boots the app.
+        self.settle = settle
         self.t0 = None
 
     def _stamp(self, label):
@@ -75,20 +79,25 @@ class AxsemFlasher:
             # Leave DTR (BOOT/PB3) alone; pulse only nRST. BOOT is forced low
             # externally (a phone held on the NFC area drives PB3 low = the boot state).
             self._stamp("dtr-off: reset pulse only (BOOT forced externally)")
-            self.set_reset_pin(False)
             self.set_reset_pin(True)
-            time.sleep(0.1)
+            time.sleep(self.settle)
             self.set_reset_pin(False)
+            time.sleep(self.settle)
+            self.set_reset_pin(True)
+            time.sleep(self.settle)
             return
-        self._stamp("reset low")
+        # nRST is active-low: rts low = held in reset, rts high = released/boot.
+        # Hold in reset first and let it settle, then set BOOT (DTR) and let THAT
+        # settle, and only then release reset so the board samples PB3 in the boot
+        # state. The settle gaps are the fix for boards where DTR lags the reset edge.
+        self._stamp("reset held (nRST low)")
         self.set_reset_pin(False)
+        time.sleep(self.settle)
         self._stamp(f"boot {'low' if self.boot_low else 'high'}")
         self.set_boot_pin(not self.boot_low)
-        self._stamp("reset pulse (high)")
+        time.sleep(self.settle)
+        self._stamp("reset released -> boot")
         self.set_reset_pin(True)
-        time.sleep(0.1)
-        self._stamp("reset release")
-        self.set_reset_pin(False)
         time.sleep(0.1)
         self._stamp("boot release")
         self.set_boot_pin(False)
@@ -272,6 +281,9 @@ def main():
     parser.add_argument('--dtr-off', action='store_true',
                         help="don't drive DTR (BOOT/PB3); pulse reset only. Use "
                              'when BOOT is forced low externally (a phone on the NFC)')
+    parser.add_argument('--settle', type=float, default=0.1,
+                        help='seconds to wait for a DTR/RTS change to reach the pin '
+                             'before the next edge (raise if boot still misses on a slow adapter)')
 
     args = parser.parse_args()
 
@@ -287,7 +299,8 @@ def main():
                              boot_low=not args.boot_high,
                              line_delay=args.line_delay,
                              timing=args.timing,
-                             dtr_off=args.dtr_off)
+                             dtr_off=args.dtr_off,
+                             settle=args.settle)
         if args.try_both:
             return 0 if probe.probe_both() else 1
         return 0 if probe.probe() is True else 1
@@ -302,7 +315,8 @@ def main():
                            boot_low=not args.boot_high,
                            line_delay=args.line_delay,
                            timing=args.timing,
-                           dtr_off=args.dtr_off)
+                           dtr_off=args.dtr_off,
+                           settle=args.settle)
     success = flasher.flash(args.hex_file)
 
     return 0 if success else 1
