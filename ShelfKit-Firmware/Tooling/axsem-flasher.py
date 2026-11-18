@@ -10,7 +10,7 @@ from tqdm import tqdm
 class AxsemFlasher:
     def __init__(self, port, baudrate=38400, timeout=1,
                  open_loop=False, erase_wait=3.0, boot_low=True, line_delay=0.01,
-                 timing=False):
+                 timing=False, dtr_off=False):
         self.port = port
         self.baudrate = baudrate
         self.timeout = timeout
@@ -27,6 +27,9 @@ class AxsemFlasher:
         # duration, so a TX-wired unit can be used to measure the waits the
         # open-loop unit has to hard-code.
         self.timing = timing
+        # dtr_off: don't drive DTR (BOOT/PB3) in the pin dance; pulse reset only.
+        # Use when BOOT is forced low externally (a phone on the NFC area drives PB3 low).
+        self.dtr_off = dtr_off
         self.t0 = None
 
     def _stamp(self, label):
@@ -68,6 +71,15 @@ class AxsemFlasher:
         # flip --boot-high for a jig that inverts the line the other way.
         print("Entering boot mode...")
         self.t0 = time.monotonic()
+        if self.dtr_off:
+            # Leave DTR (BOOT/PB3) alone; pulse only nRST. BOOT is forced low
+            # externally (a phone held on the NFC area drives PB3 low = the boot state).
+            self._stamp("dtr-off: reset pulse only (BOOT forced externally)")
+            self.set_reset_pin(False)
+            self.set_reset_pin(True)
+            time.sleep(0.1)
+            self.set_reset_pin(False)
+            return
         self._stamp("reset low")
         self.set_reset_pin(False)
         self._stamp(f"boot {'low' if self.boot_low else 'high'}")
@@ -86,7 +98,47 @@ class AxsemFlasher:
         time.sleep(0.1)
         response = self.serial.readline().decode('utf-8', errors='ignore').strip()
         return response
-    
+
+    def probe(self):
+        # Safe boot-entry check: enter boot mode, read the banner, then stop --
+        # no erase, no program. An empty banner means either "not in the
+        # bootloader" or "no TX wired back"; only a port with PB4 wired can tell.
+        print("Probing bootloader (no flash)...")
+        if not self.open():
+            return False
+        self.enter_boot_mode()
+        if self.open_loop:
+            print("open-loop: no TX wired back, nothing to read")
+            self.close()
+            return None
+        banner = self.get_banner()
+        ok = "Bootloader" in banner
+        print(f"Banner: {banner!r}  ->  {'IN bootloader' if ok else 'no banner'}")
+        self.close()
+        return ok
+
+    def probe_both(self):
+        # Find the DTR polarity that forces the bootloader, on a TX-wired port.
+        # Tries both and reports which to use. No flashing.
+        for label, boot_low in (("default (DTR low)", True),
+                                ("--boot-high (DTR high)", False)):
+            self.boot_low = boot_low
+            print(f"\nTrying {label} ...")
+            if not self.open():
+                continue
+            self.enter_boot_mode()
+            banner = self.get_banner()
+            ok = "Bootloader" in banner
+            print(f"  Banner: {banner!r}  ->  {'IN bootloader' if ok else 'no banner'}")
+            self.close()
+            if ok:
+                print(f"\nUse this polarity: {label}")
+                return True
+        print("\nNeither polarity gave a banner. Confirm this port has the board's "
+              "TX (PB4) wired to the adapter RX -- without it the banner can never "
+              "be read, no matter the polarity.")
+        return False
+
     def validate_bootloader(self):
         print("Validating bootloader...")
         if not self.open():
@@ -211,12 +263,34 @@ def main():
     parser.add_argument('--timing', action='store_true',
                         help='stamp boot edges + banner + K->OK erase duration '
                              '(use on a TX-wired unit to size the open-loop waits)')
+    parser.add_argument('--probe', action='store_true',
+                        help='enter boot mode, read the banner, then stop (no '
+                             'erase/flash); diagnostic for a port with TX wired')
+    parser.add_argument('--try-both', action='store_true',
+                        help='with --probe: test both DTR polarities and report '
+                             'which one forces the bootloader (needs TX wired)')
+    parser.add_argument('--dtr-off', action='store_true',
+                        help="don't drive DTR (BOOT/PB3); pulse reset only. Use "
+                             'when BOOT is forced low externally (a phone on the NFC)')
 
     args = parser.parse_args()
 
     if args.list:
         list_ports()
         return 0
+
+    if args.probe:
+        if not args.port:
+            parser.error("--probe needs -p PORT")
+        probe = AxsemFlasher(args.port, args.baudrate,
+                             open_loop=args.open_loop,
+                             boot_low=not args.boot_high,
+                             line_delay=args.line_delay,
+                             timing=args.timing,
+                             dtr_off=args.dtr_off)
+        if args.try_both:
+            return 0 if probe.probe_both() else 1
+        return 0 if probe.probe() is True else 1
 
     if not args.hex_file or not args.port:
         parser.print_help()
@@ -227,7 +301,8 @@ def main():
                            erase_wait=args.erase_wait,
                            boot_low=not args.boot_high,
                            line_delay=args.line_delay,
-                           timing=args.timing)
+                           timing=args.timing,
+                           dtr_off=args.dtr_off)
     success = flasher.flash(args.hex_file)
 
     return 0 if success else 1
