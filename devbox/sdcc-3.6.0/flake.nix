@@ -32,6 +32,36 @@
               "--disable-z180-port"
             ];
             meta.description = "Small Device C Compiler (mcs51 only)";
+
+            # The nix SDCC links against its own glibc 2.34 closure (via RUNPATH). A devbox
+            # profile puts a newer libstdc++ on LD_LIBRARY_PATH, which wins over RUNPATH and
+            # crashes the binary with a GLIBC version error. Two things must hold so
+            # `sdcc`/`sdas8051`/`packihx` just work on PATH with no manual env:
+            #   1) each top-level tool is a wrapper that clears LD_LIBRARY_PATH first, so the
+            #      loader falls back to RUNPATH (the right closure);
+            #   2) the driver finds its sibling tools (sdcpp/sdas8051/sdld) by its own argv[0]
+            #      directory, so the real tools keep their names under bin/.sdcc/ and the
+            #      wrappers exec them from there - renaming sdcc to .sdcc-real would make it
+            #      look for .sdcpp-real and fail. share/ (the include path) is a compiled-in
+            #      absolute prefix and is left untouched.
+            postFixup = ''
+              mkdir -p "$out/bin/.sdcc"
+              for t in sdcc sdcpp sdas8051 sdld sdar sdranlib sdcdb sdobjcopy sdnm s51 sdcclib as2gbmap makebin packihx; do
+                [ -e "$out/bin/$t" ] && mv "$out/bin/$t" "$out/bin/.sdcc/$t"
+              done
+              mkwrapper() {
+                tool="''$1"
+                [ -x "$out/bin/.sdcc/$tool" ] || return 0
+                real="$out/bin/.sdcc/''${tool}"
+                {
+                  echo '#!/bin/sh'
+                  echo 'unset LD_LIBRARY_PATH'
+                  echo "exec \"$real\" \"\$@\""
+                } > "$out/bin/$tool"
+                chmod +x "$out/bin/$tool"
+              }
+              for t in sdcc sdas8051 packihx; do mkwrapper "$t"; done
+            '';
           };
         };
     in {
