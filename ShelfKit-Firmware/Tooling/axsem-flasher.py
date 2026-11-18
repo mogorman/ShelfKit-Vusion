@@ -162,7 +162,7 @@ class AxsemFlasher:
             # no TX to read the banner from; the reset above put it in the
             # bootloader, so give the FRC calibration a moment and trust it.
             print("open-loop: no banner check (no TX wired back)")
-            time.sleep(0.5)
+            time.sleep(1.0)
             return True
 
         banner = self.get_banner()
