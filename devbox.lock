@@ -20,6 +20,70 @@
     "github:NixOS/nixpkgs/nixpkgs-unstable": {
       "last_modified": "2026-11-10T04:36:05Z",
       "resolved": "github:NixOS/nixpkgs/9ac0edc06bfb33e6c0000be79d98ef8d89e26503?lastModified=1794285365&narHash=sha256-wZbTou%2BANeUoN7ojuMBOPU9D4qMZ96MLxcDp2BzmIUY%3D"
+    },
+    "platformio@latest": {
+      "last_modified": "2026-10-02T22:55:44Z",
+      "resolved": "github:NixOS/nixpkgs/55ba7f49ef2962b42cbd126522b7df5f95037679#platformio",
+      "source": "devbox-search",
+      "version": "6.1.19",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/6r8rir3v5xqq0ir2q5axjbdlnhs7ypyy-platformio-6.1.19",
+              "default": true
+            },
+            {
+              "name": "dist",
+              "path": "/nix/store/xasn4hc5kcmd4gmn9r3fv63kijw5ljly-platformio-6.1.19-dist"
+            },
+            {
+              "name": "udev",
+              "path": "/nix/store/xqfw8wj1l9zgwxbmhfshgq8dxlh8129n-platformio-6.1.19-udev"
+            }
+          ],
+          "store_path": "/nix/store/6r8rir3v5xqq0ir2q5axjbdlnhs7ypyy-platformio-6.1.19"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/asab97dhijqk3y8khxi7a8mca7bvv3s8-platformio-6.1.19",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/asab97dhijqk3y8khxi7a8mca7bvv3s8-platformio-6.1.19"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/iffdcacr1v0zpbhzwrrym3700jp988zx-platformio-6.1.19",
+              "default": true
+            },
+            {
+              "name": "dist",
+              "path": "/nix/store/zzdigjbh2jqlk0ybbwadjs39axijvkaa-platformio-6.1.19-dist"
+            },
+            {
+              "name": "udev",
+              "path": "/nix/store/xxy2licz5y7n556r03chw9r76dd7sjzk-platformio-6.1.19-udev"
+            }
+          ],
+          "store_path": "/nix/store/iffdcacr1v0zpbhzwrrym3700jp988zx-platformio-6.1.19"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/1slw1lns8n5qyawhmj6ifyzrran5284z-platformio-6.1.19",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/1slw1lns8n5qyawhmj6ifyzrran5284z-platformio-6.1.19"
+        }
+      }
     }
   }
 }
