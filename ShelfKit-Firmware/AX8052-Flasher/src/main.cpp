@@ -215,9 +215,14 @@ static void cmd_bridge(void) {
   while (Serial1.available()) Serial1.read();  // drop the bootloader banner
   Serial1.write('R');                            // run the flashed application
   delay(600);                                    // app boots, re-inits UART @115200
-  // 3. switch the relay to the app baud and announce
+  // 3. switch the relay to the app baud and announce. end()+begin() did not
+  //    re-take the baud on this core, so re-begin directly and flush the 38400
+  //    garbage that piled up in the buffer while the app was coming up.
   Serial1.end();
+  delay(20);
   Serial1.begin(115200, SERIAL_8N1, kPinUartRxd, kPinUartTxd);
+  delay(20);
+  while (Serial1.available()) Serial1.read();    // drop 38400 garbage
   while (Serial.available()) Serial.read();      // drop anything queued
   Serial.println("bridge: transparent console<->UART0 @115200; reboot the ESP32 to leave");
   Serial.flush();
