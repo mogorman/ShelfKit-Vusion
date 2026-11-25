@@ -132,20 +132,21 @@ static void cmd_scan(void) {
   }
 }
 
-// Enter the AX8052 bootloader: hold BOOT low over a reset pulse. Uses kPinBoot
-// (PB3) and kPinResetN (PB4); the chip samples BOOT on the rising reset edge.
+// Enter the AX8052 bootloader: hold BOOT (PB3) LOW over a reset pulse. The chip
+// runs the app only when BOOT is HIGH at reset, so it must be LOW on the rising
+// RESET_N edge to boot into the bootloader instead.
 static void ax_uart_boot_dance(void) {
   pinMode(kPinBoot, OUTPUT);
   pinMode(kPinResetN, OUTPUT);
-  digitalWrite(kPinResetN, 1);
+  digitalWrite(kPinResetN, 1);  // reset released (idle)
   delay(50);
-  digitalWrite(kPinBoot, 1);
+  digitalWrite(kPinBoot, 0);    // BOOT low -> force the bootloader
   delay(20);
-  digitalWrite(kPinResetN, 0);
+  digitalWrite(kPinResetN, 0);  // assert reset
   delay(20);
-  digitalWrite(kPinResetN, 1);
-  delay(10);
-  digitalWrite(kPinBoot, 0);
+  digitalWrite(kPinResetN, 1);  // release -> chip samples BOOT=low -> bootloader
+  delay(20);
+  digitalWrite(kPinBoot, 1);    // release BOOT high (app state)
   pinMode(kPinBoot, INPUT);
   pinMode(kPinResetN, INPUT);
 }
