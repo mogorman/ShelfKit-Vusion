@@ -406,6 +406,25 @@ def uart_probe(port):
         _relay_exit(port)
 
 
+def uart_raw(port, seconds=9):
+    """Enter the UART0 bridge and dump every raw byte for `seconds`.
+
+    Diagnostic only: shows the chip's exact boot stream (jedec/hdr/none/banner,
+    or a repeating jedec line if it is reset-looping) without the probe's
+    one-line-per-pass parsing.
+    """
+    _relay_enter(port)
+    try:
+        end = time.monotonic() + seconds
+        while time.monotonic() < end:
+            d = port.read(512)
+            if d:
+                sys.stdout.write(d.decode("latin1"))
+                sys.stdout.flush()
+    finally:
+        _relay_exit(port)
+
+
 def run_command(port, args):
     cmd = args.cmd
     if cmd == "help":
@@ -461,6 +480,8 @@ def run_command(port, args):
         uart_flash(port, args.hexfile, line_delay=getattr(args, "line_delay", 0.01))
     elif cmd == "probe":
         uart_probe(port)
+    elif cmd == "raw":
+        uart_raw(port, getattr(args, "seconds", 9))
     else:
         raise ValueError("unknown command %s" % cmd)
 
@@ -504,6 +525,8 @@ def build_parser():
     uart.add_argument("--line-delay", default=0.01, type=float,
                       help="seconds between hex lines (default 0.01)")
     sub.add_parser("probe", help="enter the UART bridge, print the bootloader banner, exit (no flash)")
+    raw = sub.add_parser("raw", help="enter the UART bridge and dump raw bytes (diagnostic)")
+    raw.add_argument("--seconds", default=9, type=int, help="how long to capture (default 9)")
 
     sub.add_parser("erase", help="secure-erase the main flash and the debug key")
     sub.add_parser("pc", help="print the program counter")

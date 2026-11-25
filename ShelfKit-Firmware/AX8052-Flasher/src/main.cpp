@@ -153,18 +153,21 @@ static void ax_uart_boot_dance(void) {
   pinMode(kPinResetN, INPUT);
 }
 
-// Release every debug drive line so the ESP32 is electrically off the debug bus
-// while a UART relay runs. The AX8052 shares its debug bus with the PB4/PB5 UART,
-// so a driven debug line (CLK held low, DATA held high) holds a UART pin and the
-// chip never answers. Leaving all of them high-Z is the same as unplugging the
-// debug wires; restore the normal idle state with ax_pins_begin() when done.
+// Take the debug drive lines off the bus while a UART relay runs. The AX8052
+// shares its debug bus with the PB4/PB5 UART, so a driven debug line (CLK low,
+// DATA high) holds a UART pin and the chip never answers. CLK/DATA/OE go high-Z;
+// DBG_EN is driven LOW (not floating) - with the wire attached, a floating pin
+// left the chip parked in debug mode and it never booted, while a solid low
+// matches the working "debug wire unplugged" state. Restore the idle state with
+// ax_pins_begin() when done.
 static void ax_release_debug_bus(void) {
   pinMode(kPinClk, INPUT);
   pinMode(kPinDataOut, INPUT);
   pinMode(kPinDataIn, INPUT);
   pinMode(kPinOe, OUTPUT);
   digitalWrite(kPinOe, HIGH);  // buffer off (if fitted); a dangle if not
-  pinMode(kPinDbgEn, INPUT);
+  pinMode(kPinDbgEn, OUTPUT);
+  digitalWrite(kPinDbgEn, LOW);  // debug disabled, deterministically
 }
 
 // Relay the PC console to the AX8052 bootloader over UART1 (PB4 TX / PB5 RX).
