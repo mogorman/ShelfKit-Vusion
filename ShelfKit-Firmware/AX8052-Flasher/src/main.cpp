@@ -281,6 +281,17 @@ static void cmd_trace(void) {
   ax_leave_debug();
 }
 
+// A desynced chunk is recovered on the wire: re-enter debug and re-unlock, then
+// redo the chunk. The host re-sending the whole command used to race the ESP32's
+// 288-byte input buffer (line too long) and lose the link; doing the re-sync
+// here keeps exactly one command in flight at a time.
+static const int kMaxChunkRetries = 8;
+
+static int resync_link(const char* what) {
+  ConnectSession session(g_key);
+  return connect_for_access(&session, what);
+}
+
 static void cmd_read(uint16_t addr, uint32_t len) {
   RunOps ran;
   uint32_t i;
@@ -304,26 +315,38 @@ static void cmd_read(uint16_t addr, uint32_t len) {
 
   for (i = 0; i < len;) {
     uint32_t n = len - i;
-    uint32_t j;
-    std::vector<Op> chunk;
-    RunOps dumped;
+    if (n > kTransferChunk) n = kTransferChunk;
+    int attempt = 0;
+    int ok = 0;
     std::vector<uint8_t> bytes;
     const char* err = 0;
-    if (n > kTransferChunk) n = kTransferChunk;
-    for (j = 0; j < n; j++) append_code_byte(&chunk, (uint16_t)(addr + i + j));
-    dumped = ax_run(chunk);
-    if (!dumped.ok) {
-      Serial.printf("read: %s\n", dumped.error ? dumped.error : "fail");
+    while (attempt < kMaxChunkRetries && !ok) {
+      attempt++;
+      uint32_t j;
+      std::vector<Op> chunk;
+      bytes.clear();
+      for (j = 0; j < n; j++) append_code_byte(&chunk, (uint16_t)(addr + i + j));
+      RunOps dumped = ax_run(chunk);
+      if (dumped.ok && collect_dump_bytes(dumped.replies.empty() ? 0 : &dumped.replies[0],
+                                          (int)dumped.replies.size(), n, &bytes, &err)) {
+        ok = 1;
+        break;
+      }
+      if (attempt >= kMaxChunkRetries) {
+        Serial.printf("read: %s\n", dumped.error ? dumped.error : (err ? err : "fail"));
+        break;
+      }
+      if (!resync_link("read")) {
+        Serial.println("read: re-sync lost");
+        break;
+      }
+      delay(1 + (attempt < 4 ? attempt : 4));
+    }
+    if (!ok) {
       ax_leave_debug();
       return;
     }
-    if (!collect_dump_bytes(dumped.replies.empty() ? 0 : &dumped.replies[0],
-                            (int)dumped.replies.size(), n, &bytes, &err)) {
-      Serial.println(err ? err : "short dump reply");
-      ax_leave_debug();
-      return;
-    }
-    for (j = 0; j < bytes.size(); j++) {
+    for (uint32_t j = 0; j < bytes.size(); j++) {
       if ((j % 16u) == 0) Serial.printf("%04X:", (unsigned)(addr + i + j));
       Serial.printf(" %02X", bytes[j]);
       if ((j % 16u) == 15u || j + 1 == bytes.size()) Serial.println();
@@ -372,26 +395,45 @@ static void cmd_write(uint16_t addr, const uint8_t* data, uint32_t len) {
   if (!connect_for_access(&session, "write")) return;
   for (off = 0; off < len;) {
     uint32_t n = len - off;
-    std::vector<Op> ops;
-    RunOps ran;
-    const char* err = 0;
     if (n > kTransferChunk) n = kTransferChunk;
-    if (!append_code_bytes(&ops, (uint16_t)(addr + off), data + off, n)) {
-      Serial.println("write range");
-      ax_leave_debug();
-      return;
-    }
-    if (!ops.empty()) {
-      ran = ax_run(ops);
-      if (!ran.ok || !take_code_bytes(ran.replies.empty() ? 0 : &ran.replies[0],
-                                      (int)ran.replies.size(), data + off, n, &err)) {
-        size_t r;
-        Serial.println(err ? err : (ran.error ? ran.error : "write reply"));
-        for (r = 0; r < ran.replies.size() && r < 16; r++) Serial.printf(" %02X", ran.replies[r]);
-        if (!ran.replies.empty()) Serial.println();
+    int attempt = 0;
+    int ok = 0;
+    while (attempt < kMaxChunkRetries && !ok) {
+      attempt++;
+      std::vector<Op> ops;
+      RunOps ran;
+      const char* err = 0;
+      if (!append_code_bytes(&ops, (uint16_t)(addr + off), data + off, n)) {
+        Serial.println("write range");
         ax_leave_debug();
         return;
       }
+      if (ops.empty()) {
+        ok = 1;
+        break;
+      }
+      ran = ax_run(ops);
+      if (ran.ok && take_code_bytes(ran.replies.empty() ? 0 : &ran.replies[0],
+                                    (int)ran.replies.size(), data + off, n, &err)) {
+        ok = 1;
+        break;
+      }
+      if (attempt >= kMaxChunkRetries) {
+        size_t r;
+        Serial.printf("write fail at %04X after %d tries\n", (unsigned)(addr + off), attempt);
+        for (r = 0; r < ran.replies.size() && r < 16; r++) Serial.printf(" %02X", ran.replies[r]);
+        if (!ran.replies.empty()) Serial.println();
+        break;
+      }
+      if (!resync_link("write")) {
+        Serial.printf("write fail at %04X: re-sync lost\n", (unsigned)(addr + off));
+        break;
+      }
+      delay(1 + (attempt < 4 ? attempt : 4));
+    }
+    if (!ok) {
+      ax_leave_debug();
+      return;
     }
     off += n;
   }

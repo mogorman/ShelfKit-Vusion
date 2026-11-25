@@ -120,6 +120,8 @@ def failure_line(text):
             return stripped
         if stripped.startswith("read:"):
             return stripped
+        if stripped.startswith("write fail"):
+            return stripped
         if stripped in FAIL_EXACT:
             return stripped
     return None
