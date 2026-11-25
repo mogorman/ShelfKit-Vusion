@@ -193,28 +193,34 @@ static void cmd_uart(void) {
   }
 }
 
-// Transparent console<->UART0 bridge for the running hub app. Unlike `uart`, no
-// boot dance (BOOT left high, so the chip runs the app, not the bootloader) and
-// 115200 (the hub command channel, not the bootloader's 38400). It stays active
-// until the ESP32 is rebooted; there is no exit command.
+// Transparent console<->UART0 bridge for the running hub app. The BOOT strap
+// does not reliably reach the hub on this board (high or low both land in the
+// bootloader), so instead of relying on it we reset the hub into the bootloader
+// (BOOT low), send it an 'R' at 38400 to run the flashed app, then switch the
+// relay to the app's 115200. It stays active until the ESP32 reboots; no exit.
 static void cmd_bridge(void) {
   ax_release_debug_bus();
   pinMode(kPinBoot, OUTPUT);
-  digitalWrite(kPinBoot, 1);      // app state, not bootloader
+  digitalWrite(kPinBoot, 0);       // bootloader
   pinMode(kPinResetN, OUTPUT);
-  digitalWrite(kPinResetN, 1);    // reset released
-  Serial.println("bridge: transparent console<->UART0 @115200; reboot the ESP32 to leave");
-  Serial.flush();
-  Serial1.begin(115200, SERIAL_8N1, kPinUartRxd, kPinUartTxd);  // relay live FIRST
-  while (Serial.available()) Serial.read();
-  // Reset the hub only now, so its boot banner comes out while the relay is
-  // already running and the console sees the application start. (Resetting first
-  // lost the banner: it printed before Serial1 was up, and the app is quiet until
-  // a tag polls.)
-  digitalWrite(kPinResetN, 0);    // reset the hub -> comes up in the app (BOOT high)
+  digitalWrite(kPinResetN, 1);     // reset released
+  // 1. reset the hub into the bootloader
+  digitalWrite(kPinResetN, 0);
   delay(20);
   digitalWrite(kPinResetN, 1);
-  delay(100);                     // let it start printing
+  delay(150);
+  // 2. talk to the bootloader at 38400 and tell it to run the app
+  Serial1.begin(38400, SERIAL_8N1, kPinUartRxd, kPinUartTxd);
+  delay(300);
+  while (Serial1.available()) Serial1.read();  // drop the bootloader banner
+  Serial1.write('R');                            // run the flashed application
+  delay(600);                                    // app boots, re-inits UART @115200
+  // 3. switch the relay to the app baud and announce
+  Serial1.end();
+  Serial1.begin(115200, SERIAL_8N1, kPinUartRxd, kPinUartTxd);
+  while (Serial.available()) Serial.read();      // drop anything queued
+  Serial.println("bridge: transparent console<->UART0 @115200; reboot the ESP32 to leave");
+  Serial.flush();
   for (;;) {
     if (Serial.available()) Serial1.write((uint8_t)Serial.read());
     if (Serial1.available()) Serial.write((uint8_t)Serial1.read());
