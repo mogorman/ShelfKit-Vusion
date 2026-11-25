@@ -156,9 +156,9 @@ static void ax_uart_boot_dance(void) {
 // Take the debug drive lines off the bus while a UART relay runs. The AX8052
 // shares its debug bus with the PB4/PB5 UART, so a driven debug line (CLK low,
 // DATA high) holds a UART pin and the chip never answers. CLK/DATA/OE go high-Z;
-// DBG_EN is driven LOW (not floating) - with the wire attached, a floating pin
-// left the chip parked in debug mode and it never booted, while a solid low
-// matches the working "debug wire unplugged" state. Restore the idle state with
+// DBG_EN is driven HIGH (the normal-run level) - with the wire attached, low or
+// floating held the chip in debug mode and it never booted, while high matches
+// the working "debug wire unplugged" state. Restore the idle state with
 // ax_pins_begin() when done.
 static void ax_release_debug_bus(void) {
   pinMode(kPinClk, INPUT);
@@ -167,7 +167,7 @@ static void ax_release_debug_bus(void) {
   pinMode(kPinOe, OUTPUT);
   digitalWrite(kPinOe, HIGH);  // buffer off (if fitted); a dangle if not
   pinMode(kPinDbgEn, OUTPUT);
-  digitalWrite(kPinDbgEn, LOW);  // debug disabled, deterministically
+  digitalWrite(kPinDbgEn, HIGH);  // normal-run level, debug held off
 }
 
 // Relay the PC console to the AX8052 bootloader over UART1 (PB4 TX / PB5 RX).
