@@ -441,7 +441,7 @@ def write_hex(cells: dict[int, int], record: int = 16) -> str:
     return "\n".join(out) + "\n"
 
 
-def bundle(tag_hex: Path, boot_hex: Path, out_dir: Path, version: str | None) -> Path:
+def bundle(app_hex: Path, boot_hex: Path, out_dir: Path, version: str | None, stem: str = "vusion-full") -> Path:
     """Merge the bootloader and the application into the HEX one flash run needs.
 
     Two things make this more than a concatenation:
@@ -455,14 +455,14 @@ def bundle(tag_hex: Path, boot_hex: Path, out_dir: Path, version: str | None) ->
       a freshly flashed tag starts its application immediately.
     """
     boot = read_hex(boot_hex)
-    app = read_hex(tag_hex)
+    app = read_hex(app_hex)
 
     if not boot:
         raise SystemExit(f"{boot_hex} is empty")
     if not app:
-        raise SystemExit(f"{tag_hex} is empty")
+        raise SystemExit(f"{app_hex} is empty")
     if app.get(0) != 0x02:
-        raise SystemExit(f"{tag_hex}: the application does not start with a reset jump")
+        raise SystemExit(f"{app_hex}: the application does not start with a reset jump")
     entry = (app[1] << 8) | app[2]
     app = {a: b for a, b in app.items() if a > 2}
 
@@ -472,7 +472,7 @@ def bundle(tag_hex: Path, boot_hex: Path, out_dir: Path, version: str | None) ->
     if min(boot) != 0 or not all(a < 3 or a >= BOOT_BASE for a in boot):
         raise SystemExit(f"{boot_hex}: expected only the vector at 0 and code from 0x{BOOT_BASE:04X}")
     if max(app) >= BOOT_BASE:
-        raise SystemExit(f"{tag_hex}: the application runs into the bootloader at 0x{BOOT_BASE:04X}")
+        raise SystemExit(f"{app_hex}: the application runs into the bootloader at 0x{BOOT_BASE:04X}")
 
     overlap = set(app) & set(boot)
     if overlap:
@@ -485,7 +485,7 @@ def bundle(tag_hex: Path, boot_hex: Path, out_dir: Path, version: str | None) ->
     merged[APP_VECTOR] = entry & 0xFF        # run_application() reads low byte first
     merged[APP_VECTOR + 1] = entry >> 8
 
-    name = build_stem("vusion-full", version)
+    name = build_stem(stem, version)
     target = out_dir / f"{name}.hex"
     target.write_text(write_hex(merged), encoding="utf-8")
     print(f"\n=== one HEX for both ===")
@@ -559,13 +559,16 @@ def main(argv: list[str] | None = None) -> int:
     else:
         write_build_log(stamped, results, args.bump)
 
-    if not args.no_bundle and "Vusion" in chosen and "Bootloader" in chosen:
+    bundled = {}
+    if not args.no_bundle and "Bootloader" in chosen:
         by_target = {row["target"]: row["hex"] for row in results}
-        try:
-            full_hex = bundle(by_target["Vusion"], by_target["Bootloader"],
-                              out_dir, args.version)
-        except SystemExit as exc:
-            print(f"\n!!! could not bundle: {exc}")
+        for app_target, stem in (("Vusion", "vusion-full"), ("Vusion-Hub", "vusion-hub-full")):
+            if app_target in by_target:
+                try:
+                    bundled[stem] = bundle(by_target[app_target], by_target["Bootloader"],
+                                           out_dir, args.version, stem)
+                except SystemExit as exc:
+                    print(f"\n!!! could not bundle {stem}: {exc}")
 
     for row in results:
         if row["target"] == "Vusion" and row.get("code", 0) > OTA_IMAGE_WINDOW:
@@ -579,16 +582,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"\n=== ready to flash: firmware {version_text(stamped)}, logged in {display(BUILD_LOG)} ===")
     for row in results:
         print(f"  {row['hex'].name:<44} {row['bytes']:>8} bytes  {row['usage']}")
-    full = locals().get("full_hex")
-    hub = next((row["hex"] for row in results if row["target"] == "Vusion-Hub"), None)
-    if full is not None:
-        print(f"\nTag:  python {HERE / 'axsem-flasher.py'} {full} -p COM4")
-        print("      (the full image: bootloader + application + the reset vector that")
-        print("       points at the bootloader. Flashing vusion-*.hex alone overwrites")
-        print("       0x0000 with an ljmp to the application and BYPASSES the bootloader,")
-        print("       so OTA updates can never be applied.)")
-    if hub is not None:
-        print(f"Hub:  python {HERE / 'axsem-flasher.py'} {hub} -p COM4")
+    if bundled.get("vusion-full") is not None:
+        print(f"\nTag:  {bundled['vusion-full']}")
+        print("      (bootloader + application + the reset vector that points at the")
+        print("       bootloader. Flashing vusion-*.hex alone overwrites 0x0000 with an")
+        print("       ljmp to the application and BYPASSES the bootloader, so OTA")
+        print("       updates can never be applied.)")
+    if bundled.get("vusion-hub-full") is not None:
+        print(f"Hub:  {bundled['vusion-hub-full']}  (bootloader + application + reset vector)")
     return 0
 
 
