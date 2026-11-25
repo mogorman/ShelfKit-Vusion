@@ -41,6 +41,7 @@ static void print_help(void) {
   Serial.println("sense              read CLK, DATA, DBG_EN, RESET_N only");
   Serial.println("scan               read header pins only");
   Serial.println("uart               enter the bootloader, relay the console to UART0 (Q to exit)");
+  Serial.println("bridge             transparent console<->UART0 @115200 (hub app), until reboot");
   Serial.println("Do not power the AX8052 from 5 V.");
 }
 
@@ -155,6 +156,8 @@ static void ax_uart_boot_dance(void) {
 // The PC drives the bootloader protocol (? / K / hex / R) through this relay; a
 // lone 'Q' on the PC side closes it and returns to the flasher console.
 static void cmd_uart(void) {
+  pinMode(kPinDbgEn, OUTPUT);
+  digitalWrite(kPinDbgEn, LOW);  // release debug so UART0 is free (keep the wire on)
   Serial.println("uart: entering bootloader (BOOT low over reset), relaying UART0 at 38400");
   ax_uart_boot_dance();
   Serial1.begin(38400, SERIAL_8N1, kPinUartRxd, kPinUartTxd);
@@ -171,6 +174,28 @@ static void cmd_uart(void) {
       Serial1.write((uint8_t)c);
     }
     while (Serial1.available()) Serial.write(Serial1.read());
+    delay(1);
+  }
+}
+
+// Transparent console<->UART0 bridge for the running hub app. Unlike `uart`, no
+// boot dance (BOOT left high, so the chip runs the app, not the bootloader) and
+// 115200 (the hub command channel, not the bootloader's 38400). It stays active
+// until the ESP32 is rebooted; there is no exit command.
+static void cmd_bridge(void) {
+  pinMode(kPinDbgEn, OUTPUT);
+  digitalWrite(kPinDbgEn, LOW);  // release debug so UART0 is free (keep the wire on)
+  pinMode(kPinBoot, OUTPUT);
+  digitalWrite(kPinBoot, 1);      // app state, not bootloader
+  pinMode(kPinResetN, OUTPUT);
+  digitalWrite(kPinResetN, 1);    // reset released
+  Serial.println("bridge: transparent console<->UART0 @115200; reboot the ESP32 to leave");
+  Serial.flush();
+  Serial1.begin(115200, SERIAL_8N1, kPinUartRxd, kPinUartTxd);
+  while (Serial.available()) Serial.read();  // drop queued console bytes
+  for (;;) {
+    if (Serial.available()) Serial1.write((uint8_t)Serial.read());
+    if (Serial1.available()) Serial.write((uint8_t)Serial1.read());
     delay(1);
   }
 }
@@ -705,6 +730,10 @@ static void handle_line(char* line) {
   }
   if (strcmp(cmd, "uart") == 0) {
     cmd_uart();
+    return;
+  }
+  if (strcmp(cmd, "bridge") == 0) {
+    cmd_bridge();
     return;
   }
   Serial.println("unknown, help");
