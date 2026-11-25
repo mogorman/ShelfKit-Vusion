@@ -417,7 +417,7 @@ def uart_raw(port, seconds=9):
     try:
         end = time.monotonic() + seconds
         while time.monotonic() < end:
-            d = port.read(512)
+            d = port.read_some()
             if d:
                 sys.stdout.write(d.decode("latin1"))
                 sys.stdout.flush()
