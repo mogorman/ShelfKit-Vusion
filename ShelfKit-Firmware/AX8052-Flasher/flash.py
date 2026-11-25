@@ -270,6 +270,19 @@ def program(port, addr, data, steps, retries=3):
         expect(port, "steps %X" % steps, 40, "pc ", steps + 1)
 
 
+def _relay_enter(port):
+    print(">> uart")
+    port.write("uart\n")
+    time.sleep(0.5)
+    drain(port)
+
+
+def _relay_exit(port):
+    port.write("Q\n")
+    time.sleep(0.3)
+    drain(port)
+
+
 def _read_line(port, seconds):
     deadline = time.monotonic() + seconds
     buf = ""
@@ -298,10 +311,7 @@ def uart_flash(port, hex_path, line_delay=0.01):
     if not lines:
         raise ValueError("empty hex file")
 
-    print(">> uart")
-    port.write("uart\n")
-    time.sleep(0.5)
-    drain(port)
+    _relay_enter(port)
     try:
         banner = ""
         for _ in range(3):
@@ -332,9 +342,31 @@ def uart_flash(port, hex_path, line_delay=0.01):
         time.sleep(0.3)
         print("done")
     finally:
-        port.write("Q\n")
-        time.sleep(0.3)
-        drain(port)
+        _relay_exit(port)
+
+
+def uart_probe(port):
+    """Enter the UART0 bridge, print the AX8052 bootloader banner, then exit.
+
+    No erase, no flash -- just confirms the boot dance (GPIO36) and the
+    PB3/PB4/PB5 wiring. Fails if the banner lacks 'Bootloader'.
+    """
+    _relay_enter(port)
+    try:
+        banner = ""
+        for _ in range(3):
+            port.write("?")
+            line = _read_line(port, 3)
+            if line:
+                sys.stdout.write(line if line.endswith("\n") else line + "\n")
+            if "Bootloader" in line:
+                banner = line
+                break
+        if "Bootloader" not in banner:
+            raise RuntimeError("no bootloader banner (check the PB3/PB4/PB5 wiring, or the chip has no bootloader yet)")
+        print("banner OK -- chip is in the bootloader")
+    finally:
+        _relay_exit(port)
 
 
 def run_command(port, args):
@@ -386,6 +418,8 @@ def run_command(port, args):
         transact(port, "scan", 30, done)
     elif cmd == "uart":
         uart_flash(port, args.hexfile, line_delay=getattr(args, "line_delay", 0.01))
+    elif cmd == "probe":
+        uart_probe(port)
     else:
         raise ValueError("unknown command %s" % cmd)
 
@@ -428,6 +462,7 @@ def build_parser():
     uart.add_argument("hexfile", help="Intel-hex firmware file")
     uart.add_argument("--line-delay", default=0.01, type=float,
                       help="seconds between hex lines (default 0.01)")
+    sub.add_parser("probe", help="enter the UART bridge, print the bootloader banner, exit (no flash)")
 
     sub.add_parser("erase", help="secure-erase the main flash and the debug key")
     sub.add_parser("pc", help="print the program counter")
