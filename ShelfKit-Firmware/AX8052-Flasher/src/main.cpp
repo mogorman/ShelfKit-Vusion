@@ -193,27 +193,21 @@ static void cmd_uart(void) {
   }
 }
 
-// Transparent console<->UART0 bridge for the running hub app. The BOOT strap
-// does not reliably reach the hub on this board (high or low both land in the
-// bootloader), so instead of relying on it we reset the hub into the bootloader
-// (BOOT low), wait for its banner (the ~6s OTA header check must finish before
-// the command loop will act on 'R'), send 'R' at 38400 to run the flashed app,
-// then switch the relay to the app's 115200. Active until the ESP32 reboots.
-static void cmd_bridge(void) {
+// Reset the hub into the bootloader and run the flashed app via 'R'. The BOOT
+// strap does not reliably reach the hub on this board, so 'R' is the way in. The
+// ~6s OTA header check must finish before the command loop acts on 'R', hence the
+// banner wait. The app keeps running after this returns; relay() talks to it.
+static void cmd_run(void) {
   ax_release_debug_bus();
   pinMode(kPinBoot, OUTPUT);
   digitalWrite(kPinBoot, 0);       // bootloader
   pinMode(kPinResetN, OUTPUT);
-  digitalWrite(kPinResetN, 1);     // reset released
-  // 1. reset the hub into the bootloader
-  digitalWrite(kPinResetN, 0);
+  digitalWrite(kPinResetN, 1);
+  digitalWrite(kPinResetN, 0);     // reset into the bootloader
   delay(20);
   digitalWrite(kPinResetN, 1);
-  // 2. talk to the bootloader at 38400
   Serial1.begin(38400, SERIAL_8N1, kPinUartRxd, kPinUartTxd);
-  // 3. wait for the banner: it only prints after the ~6s OTA header check, at
-  //    which point the command loop will actually process 'R'.
-  bool in_loop = false;
+  bool in_loop = false;            // wait for the banner (end of the OTA check)
   uint32_t t0 = millis();
   while (!in_loop && (millis() - t0) < 9000) {
     while (Serial1.available()) {
@@ -223,26 +217,17 @@ static void cmd_bridge(void) {
     delay(1);
   }
   Serial1.write('R');               // run the flashed application
-  delay(300);                       // app inits its UART @115200 (shelfhw_init)
-  // 4. switch the relay to the app baud and drop the 38400 "OK run" ack. The
-  //    app's boot banner already fired (one-shot) during the switch; the host
-  //    re-requests it with 'V'. The app is now idle at 115200, answering P/V.
-  Serial1.updateBaudRate(115200);
-  while (Serial1.available()) Serial1.read();
-  // self-test: the ESP32 itself drives 'P' and hexdumps the app's reply, so the
-  // relay's TX+RX at 115200 are checked with no USB/Python in between.
-  Serial1.write('P');
-  delay(400);
-  Serial.print("selftest P -> ");
-  uint32_t dt = millis();
-  int hd = 0;
-  while (hd < 24 && (millis() - dt) < 1500) {
-    if (Serial1.available()) {
-      Serial.printf("%02x ", (unsigned)Serial1.read());
-      hd++;
-    }
-  }
-  Serial.println();
+  delay(800);                       // app boots and re-inits its UART @115200
+  Serial1.end();                    // release; relay() re-begins fresh @115200
+  pinMode(kPinBoot, INPUT);
+  pinMode(kPinResetN, INPUT);
+  Serial.println("run: app started, send relay to talk to it");
+}
+
+// Fresh 115200 relay of the (already running) hub app. No reset, no baud switch.
+static void cmd_relay(void) {
+  ax_release_debug_bus();
+  Serial1.begin(115200, SERIAL_8N1, kPinUartRxd, kPinUartTxd);
   while (Serial.available()) Serial.read();
   Serial.println("bridge: transparent console<->UART0 @115200; reboot the ESP32 to leave");
   Serial.flush();
@@ -251,6 +236,12 @@ static void cmd_bridge(void) {
     if (Serial1.available()) Serial.write((uint8_t)Serial1.read());
     delay(1);
   }
+}
+
+// One-shot for the server: start the app, then relay it.
+static void cmd_bridge(void) {
+  cmd_run();
+  cmd_relay();
 }
 
 static void cmd_wire(int pin) {
@@ -787,6 +778,14 @@ static void handle_line(char* line) {
   }
   if (strcmp(cmd, "bridge") == 0) {
     cmd_bridge();
+    return;
+  }
+  if (strcmp(cmd, "run") == 0) {
+    cmd_run();
+    return;
+  }
+  if (strcmp(cmd, "relay") == 0) {
+    cmd_relay();
     return;
   }
   Serial.println("unknown, help");
