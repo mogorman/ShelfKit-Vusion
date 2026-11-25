@@ -93,6 +93,9 @@ def main(argv: list[str] | None = None) -> int:
                     help="shortest time between two redraws of the hub panel (default 60)")
     ap.add_argument("--hub-display-title", metavar="TEXT", help="header of the hub panel")
     ap.add_argument("--list", action="store_true", help="list serial ports and exit")
+    ap.add_argument("--bridge", action="store_true",
+                    help="at startup, send 'bridge' to the hub port so the ESP32 relays it "
+                         "to the hub at 115200 (stays until the ESP32 is rebooted)")
     args = ap.parse_args(argv)
 
     if args.list:
@@ -121,7 +124,8 @@ def main(argv: list[str] | None = None) -> int:
         display["min_interval_s"] = args.hub_display_interval
     if args.hub_display_title:
         display["title"] = args.hub_display_title
-    app = App(specs, auto_open, store=store, display_opts=display or None)
+    app = App(specs, auto_open, store=store, display_opts=display or None,
+              bridge_hub=args.bridge)
     inkhost = app.start_inkservices()      # InkServices apps in inkapps/ (needs the store)
     if inkhost is not None:
         inkhost.start_scheduler()          # @app.every timers; stopped by inkhost.close()

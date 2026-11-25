@@ -185,10 +185,11 @@ class App:
     """The two panes plus the image push, safe to call from request threads."""
 
     def __init__(self, specs: list[PortSpec], auto_open: bool = False, store=None,
-                 display_opts: dict | None = None) -> None:
+                 display_opts: dict | None = None, bridge_hub: bool = False) -> None:
         self.lock = threading.RLock()
         self._arrivals = itertools.count(1)
         self.status = "ready"
+        self.bridge_hub = bridge_hub      # send 'bridge' to the ESP32 hub link at startup
         self.image: Path | None = None
         self.sending = False
         # True while the hub redraws its own panel: its serial line is also the panel's
@@ -250,6 +251,8 @@ class App:
                 if key == self.tag_key() and not self.prefs["show_tag_port"]:
                     continue                 # hidden in Settings: leave that port alone
                 self.open_pane(key)
+        if auto_open and self.bridge_hub:
+            self._send_bridge(self.hub_key())
 
     # ── persistence ────────────────────────────────────────────────────────
     def _restore(self) -> None:
@@ -866,6 +869,22 @@ class App:
             self._save_setting(f"pane.{key}.port", pane.spec.port)
             self._save_setting(f"pane.{key}.baud", pane.spec.baud)
             self._event("open", None, f"{pane.spec.name}={pane.spec.port}")
+
+    def _send_bridge(self, key: str) -> None:
+        """Put the ESP32 hub link into transparent bridge mode.
+
+        The ESP32 sits at its flasher console; 'bridge' makes it relay this port
+        to the hub's UART0 at 115200 until the ESP32 is rebooted. Sent once at
+        startup, not on every reopen - a second send would pipe stray bytes to
+        the hub.
+        """
+        pane = self.panes.get(key)
+        if pane is None or not pane.worker.is_open:
+            return
+        self.note(key, "# sending 'bridge' to the ESP32 hub link")
+        pane.worker.write(b"bridge\n")
+        time.sleep(0.5)          # let the ESP32 drop into the transparent relay
+        self.note(key, "# hub bridge active; reboot the ESP32 to leave it")
 
     def close_pane(self, key: str) -> None:
         pane = self.panes.get(key)
