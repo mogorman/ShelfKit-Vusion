@@ -22,11 +22,17 @@ READ_TIMEOUT_S = 0.05
 
 @dataclass
 class PortSpec:
-    """One pane's device: a display name, the port and the line speed."""
+    """One pane's device: a display name, the port and the line speed.
+
+    `explicit` marks a port the user named on the command line; one wins over a
+    port restored from the store, so `hub=/dev/ttyACM2` is not clobbered by a
+    saved `ws://...`.
+    """
 
     name: str
     port: str
     baud: int = DEFAULT_BAUD
+    explicit: bool = False
 
 
 def available_ports() -> list[tuple[str, str]]:

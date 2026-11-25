@@ -120,7 +120,8 @@ def build_specs(ports: list[str], baud: int) -> tuple[list[PortSpec], bool]:
         name, sep, port = raw.partition("=")
         if not sep:
             name, port = chr(ord("A") + i), raw
-        specs.append(PortSpec(name.strip() or chr(ord("A") + i), port.strip(), baud))
+        specs.append(PortSpec(name.strip() or chr(ord("A") + i), port.strip(), baud,
+                              explicit=True))
     while len(specs) < 2:
         used = {spec.port for spec in specs}
         free = next((dev for dev in detected if dev not in used), "")
@@ -280,7 +281,7 @@ class App:
         for key, pane in self.panes.items():
             port = saved.get(f"pane.{key}.port")
             baud = saved.get(f"pane.{key}.baud")
-            if port:
+            if port and not pane.spec.explicit:
                 pane.spec.port = str(port)
                 pane.worker.spec.port = str(port)
             if isinstance(baud, int) and baud > 0:
