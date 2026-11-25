@@ -152,12 +152,25 @@ static void ax_uart_boot_dance(void) {
   pinMode(kPinResetN, INPUT);
 }
 
+// Release every debug drive line so the ESP32 is electrically off the debug bus
+// while a UART relay runs. The AX8052 shares its debug bus with the PB4/PB5 UART,
+// so a driven debug line (CLK held low, DATA held high) holds a UART pin and the
+// chip never answers. Leaving all of them high-Z is the same as unplugging the
+// debug wires; restore the normal idle state with ax_pins_begin() when done.
+static void ax_release_debug_bus(void) {
+  pinMode(kPinClk, INPUT);
+  pinMode(kPinDataOut, INPUT);
+  pinMode(kPinDataIn, INPUT);
+  pinMode(kPinOe, OUTPUT);
+  digitalWrite(kPinOe, HIGH);  // buffer off (if fitted); a dangle if not
+  pinMode(kPinDbgEn, INPUT);
+}
+
 // Relay the PC console to the AX8052 bootloader over UART1 (PB4 TX / PB5 RX).
 // The PC drives the bootloader protocol (? / K / hex / R) through this relay; a
 // lone 'Q' on the PC side closes it and returns to the flasher console.
 static void cmd_uart(void) {
-  pinMode(kPinDbgEn, OUTPUT);
-  digitalWrite(kPinDbgEn, LOW);  // release debug so UART0 is free (keep the wire on)
+  ax_release_debug_bus();
   Serial.println("uart: entering bootloader (BOOT low over reset), relaying UART0 at 38400");
   ax_uart_boot_dance();
   Serial1.begin(38400, SERIAL_8N1, kPinUartRxd, kPinUartTxd);
@@ -168,6 +181,7 @@ static void cmd_uart(void) {
       if (c == 'Q') {
         Serial1.flush();
         Serial1.end();
+        ax_pins_begin();  // restore debug pins for the next command
         Serial.println("uart: relay closed");
         return;
       }
@@ -183,8 +197,7 @@ static void cmd_uart(void) {
 // 115200 (the hub command channel, not the bootloader's 38400). It stays active
 // until the ESP32 is rebooted; there is no exit command.
 static void cmd_bridge(void) {
-  pinMode(kPinDbgEn, OUTPUT);
-  digitalWrite(kPinDbgEn, LOW);  // release debug so UART0 is free (keep the wire on)
+  ax_release_debug_bus();
   pinMode(kPinBoot, OUTPUT);
   digitalWrite(kPinBoot, 1);      // app state, not bootloader
   pinMode(kPinResetN, OUTPUT);
