@@ -488,8 +488,13 @@ def bundle(app_hex: Path, boot_hex: Path, out_dir: Path, version: str | None, st
     name = build_stem(stem, version)
     target = out_dir / f"{name}.hex"
     target.write_text(write_hex(merged), encoding="utf-8")
+    # Raw flash image: 0x0000..top with 0xFF gap fill. flash.py reads bytes straight
+    # off this, so it must start at 0 and span the whole merge - not the app slice.
+    bin_target = out_dir / f"{name}.bin"
+    bin_target.write_bytes(bytes(merged.get(a, 0xFF) for a in range(max(merged) + 1)))
     print(f"\n=== one HEX for both ===")
     print(f"  {display(target)}")
+    print(f"  {display(bin_target)}  ({max(merged) + 1} bytes, 0x0000..0x{max(merged):04X}, 0xFF gap fill)")
     print(f"  bootloader 0x{BOOT_BASE:04X}..0x{max(boot):04X}  ({len(boot)} bytes)")
     print(f"  application 0x0003..0x{max(app):04X}  ({len(app)} bytes, entry 0x{entry:04X})")
     print(f"  jump vector 0x{APP_VECTOR:04X} = {entry & 0xFF:02X} {entry >> 8:02X}")
@@ -540,7 +545,7 @@ def main(argv: list[str] | None = None) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     # Always: the names are stable now, so a leftover build would sit next to the
     # fresh one and invite flashing the wrong file.
-    for stale in [*out_dir.glob("*.hex"), *out_dir.glob("*.map")]:
+    for stale in [*out_dir.glob("*.hex"), *out_dir.glob("*.map"), *out_dir.glob("*.bin")]:
         stale.unlink()
 
     print(f"SDCC {find_tool('sdcc')}")
@@ -583,13 +588,13 @@ def main(argv: list[str] | None = None) -> int:
     for row in results:
         print(f"  {row['hex'].name:<44} {row['bytes']:>8} bytes  {row['usage']}")
     if bundled.get("vusion-full") is not None:
-        print(f"\nTag:  {bundled['vusion-full']}")
+        print(f"\nTag:  {bundled['vusion-full'].with_suffix('.bin')}  (flash this)")
         print("      (bootloader + application + the reset vector that points at the")
         print("       bootloader. Flashing vusion-*.hex alone overwrites 0x0000 with an")
         print("       ljmp to the application and BYPASSES the bootloader, so OTA")
         print("       updates can never be applied.)")
     if bundled.get("vusion-hub-full") is not None:
-        print(f"Hub:  {bundled['vusion-hub-full']}  (bootloader + application + reset vector)")
+        print(f"Hub:  {bundled['vusion-hub-full'].with_suffix('.bin')}  (flash this)")
     return 0
 
 
