@@ -10,7 +10,7 @@ from tqdm import tqdm
 class AxsemFlasher:
     def __init__(self, port, baudrate=38400, timeout=1,
                  open_loop=False, erase_wait=3.0, boot_low=True, line_delay=0.01,
-                 timing=False, dtr_off=False, settle=0.1):
+                 timing=False, dtr_off=False, settle=0.1, no_boot=False):
         self.port = port
         self.baudrate = baudrate
         self.timeout = timeout
@@ -34,6 +34,10 @@ class AxsemFlasher:
         # next edge. USB-serial adapters lag pyserial by a few ms; without this the
         # board samples PB3 before DTR has propagated and always boots the app.
         self.settle = settle
+        # no_boot: the chip is already in the bootloader (e.g. behind an ESP32
+        # bridge that did the pin dance), so never touch DTR/RTS -- doing so can
+        # reset the bridge. Just read the banner and send K / hex / R.
+        self.no_boot = no_boot
         self.t0 = None
 
     def _stamp(self, label):
@@ -69,6 +73,10 @@ class AxsemFlasher:
         self.serial.rts = state
     
     def enter_boot_mode(self):
+        if self.no_boot:
+            print("no-boot: chip assumed already in the bootloader, not touching DTR/RTS")
+            self.t0 = time.monotonic()
+            return
         # main.c:784 runs the app only when BOOT (PB3) is HIGH at reset, so hold
         # it low during the reset pulse to force the bootloader. The 2.6" board
         # used a fixed DTR-high here because its DTR-to-PB3 path is inverted;
@@ -285,6 +293,9 @@ def main():
     parser.add_argument('--dtr-off', action='store_true',
                         help="don't drive DTR (BOOT/PB3); pulse reset only. Use "
                              'when BOOT is forced low externally (a phone on the NFC)')
+    parser.add_argument('--no-boot', action='store_true',
+                        help='chip is already in the bootloader (e.g. behind the ESP32 '
+                             'uart bridge); skip the DTR/RTS pin dance entirely')
     parser.add_argument('--settle', type=float, default=0.1,
                         help='seconds to wait for a DTR/RTS change to reach the pin '
                              'before the next edge (raise if boot still misses on a slow adapter)')
@@ -360,8 +371,9 @@ def main():
                              boot_low=not args.boot_high,
                              line_delay=args.line_delay,
                              timing=args.timing,
-                             dtr_off=args.dtr_off,
-                             settle=args.settle)
+                            dtr_off=args.dtr_off,
+                            settle=args.settle,
+                            no_boot=args.no_boot)
         if args.try_both:
             return 0 if probe.probe_both() else 1
         return 0 if probe.probe() is True else 1

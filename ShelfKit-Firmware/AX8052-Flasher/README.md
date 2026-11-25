@@ -134,6 +134,19 @@ The clock idles low. Each half of the clock is 2 µs. The data bit is set while 
 
 Leave the ESP32 strap pins 0, 3, 45, and 46 alone, and leave USB (19, 20), the module flash (26–32), octal PSRAM (33–37), and UART0 (43, 44) alone.
 
+### Optional UART0 bootloader bridge
+
+The debug port programs the chip directly. The tag and hub builds ship as `.hex` files for the AX8052's own UART bootloader, which needs three more wires. Wire them only to use the `uart` command; the debug port above works without them.
+
+```
+    ESP32-S3                         AX8052F143
+    GPIO21  BOOT    --------------  pin 21  PB3      boot select
+    GPIO18  TX      --------------  pin 22  PB4      bootloader UART TX
+    GPIO17  RX      --------------  pin 23  PB5      bootloader UART RX
+```
+
+`uart` enters the bootloader (BOOT low over a reset pulse), relays the console to the chip's UART0 at 38400, and exits on a lone `Q`. `flash.py COM5 uart firmware.hex` drives the whole bootloader sequence (`?`, `K`, the hex lines, `R`) through that relay in one connection. The chip must already hold the bootloader; a blank chip is programmed over the debug port first.
+
 ## Console
 
 115200 baud, 8 data bits, no parity, one stop bit. Open the port with DTR and RTS off. If either line is asserted, the ESP32-S3 resets and the key stored in its RAM returns to `FFFFFFFFFFFFFFFF`. The key stored in the AX8052 stays as it was.
@@ -163,6 +176,7 @@ The firmware attaches like this:
 | `reset` | resets the CPU and leaves it halted, then prints the counter |
 | `step` | executes one instruction and prints the counter |
 | `steps <n>` | in one session: reset, print the counter, then `n` steps. `n` is hex `1` through `10` |
+| `uart` | enter the bootloader, relay the console to UART0. A lone `Q` exits |
 
 `step` is its own session, so a second `step` starts from a fresh reset. `steps` keeps the reset and the following instructions in the same session.
 

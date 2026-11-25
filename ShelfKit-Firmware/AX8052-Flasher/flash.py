@@ -268,6 +268,73 @@ def program(port, addr, data, steps, retries=3):
         expect(port, "steps %X" % steps, 40, "pc ", steps + 1)
 
 
+def _read_line(port, seconds):
+    deadline = time.monotonic() + seconds
+    buf = ""
+    while time.monotonic() < deadline:
+        chunk = port.read_some()
+        if chunk:
+            buf += chunk.decode("ascii", "replace")
+            if "\n" in buf:
+                return buf
+        time.sleep(0.02)
+    return buf
+
+
+def uart_flash(port, hex_path, line_delay=0.01):
+    """Flash a .hex file through the ESP32 UART0 bridge.
+
+    The `uart` console command makes the ESP32 enter the AX8052 bootloader and
+    relay this port to its UART0 at 38400. We then speak the bootloader protocol
+    directly (same as axsem-flasher.py): ? -> banner, K -> erase OK, hex lines,
+    R -> run. A lone Q closes the relay and returns to the flasher console.
+    """
+    if not os.path.isfile(hex_path):
+        raise ValueError("hex file not found: %s" % hex_path)
+    with open(hex_path, "r") as fh:
+        lines = [ln.rstrip("\r\n") for ln in fh if ln.strip()]
+    if not lines:
+        raise ValueError("empty hex file")
+
+    print(">> uart")
+    port.write("uart\n")
+    time.sleep(0.5)
+    drain(port)
+    try:
+        banner = ""
+        for _ in range(3):
+            port.write("?")
+            banner = _read_line(port, 3)
+            if banner:
+                sys.stdout.write(banner)
+                if not banner.endswith("\n"):
+                    sys.stdout.write("\n")
+            if "Bootloader" in banner:
+                break
+        if "Bootloader" not in banner:
+            raise RuntimeError("no bootloader banner (chip not in boot mode, or TX not wired back)")
+        port.write("K")
+        reply = _read_line(port, 30)
+        if reply:
+            sys.stdout.write(reply)
+            if not reply.endswith("\n"):
+                sys.stdout.write("\n")
+        if "OK" not in reply:
+            raise RuntimeError("erase not confirmed: %r" % reply.strip())
+        print("programming %d hex lines" % len(lines))
+        for ln in lines:
+            port.write(ln + "\n")
+            time.sleep(line_delay)
+        time.sleep(0.2)
+        port.write("R")
+        time.sleep(0.3)
+        print("done")
+    finally:
+        port.write("Q\n")
+        time.sleep(0.3)
+        drain(port)
+
+
 def run_command(port, args):
     cmd = args.cmd
     if cmd == "help":
@@ -315,6 +382,8 @@ def run_command(port, args):
         def done(text):
             return len(re.findall(r"(?m)^scan \d+ ", text)) >= SCAN_LINES
         transact(port, "scan", 30, done)
+    elif cmd == "uart":
+        uart_flash(port, args.hexfile, line_delay=getattr(args, "line_delay", 0.01))
     else:
         raise ValueError("unknown command %s" % cmd)
 
@@ -352,6 +421,11 @@ def build_parser():
     image.add_argument("--steps", default=0, type=int, help="after a match, step the core 1..16 times")
     image.add_argument("--retries", default=3, type=int,
                        help="re-send a timed-out or failed chunk this many times (default 3)")
+
+    uart = sub.add_parser("uart", help="flash a .hex through the UART0 bootloader bridge")
+    uart.add_argument("hexfile", help="Intel-hex firmware file")
+    uart.add_argument("--line-delay", default=0.01, type=float,
+                      help="seconds between hex lines (default 0.01)")
 
     sub.add_parser("erase", help="secure-erase the main flash and the debug key")
     sub.add_parser("pc", help="print the program counter")

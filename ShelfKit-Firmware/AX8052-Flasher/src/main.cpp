@@ -40,6 +40,7 @@ static void print_help(void) {
   Serial.println("trace              CLK, DBG_EN, RESET_N, DATA during status");
   Serial.println("sense              read CLK, DATA, DBG_EN, RESET_N only");
   Serial.println("scan               read header pins only");
+  Serial.println("uart               enter the bootloader, relay the console to UART0 (Q to exit)");
   Serial.println("Do not power the AX8052 from 5 V.");
 }
 
@@ -128,6 +129,48 @@ static void cmd_scan(void) {
   for (i = 0; i < kScanPinCount; i++) {
     Serial.printf("scan %d pd %u pu %u mv %d..%d\n", pins[i].pin, pins[i].pulldown, pins[i].pullup,
                   pins[i].mv_min, pins[i].mv_max);
+  }
+}
+
+// Enter the AX8052 bootloader: hold BOOT low over a reset pulse. Uses kPinBoot
+// (PB3) and kPinResetN (PB4); the chip samples BOOT on the rising reset edge.
+static void ax_uart_boot_dance(void) {
+  pinMode(kPinBoot, OUTPUT);
+  pinMode(kPinResetN, OUTPUT);
+  digitalWrite(kPinResetN, 1);
+  delay(50);
+  digitalWrite(kPinBoot, 1);
+  delay(20);
+  digitalWrite(kPinResetN, 0);
+  delay(20);
+  digitalWrite(kPinResetN, 1);
+  delay(10);
+  digitalWrite(kPinBoot, 0);
+  pinMode(kPinBoot, INPUT);
+  pinMode(kPinResetN, INPUT);
+}
+
+// Relay the PC console to the AX8052 bootloader over UART1 (PB4 TX / PB5 RX).
+// The PC drives the bootloader protocol (? / K / hex / R) through this relay; a
+// lone 'Q' on the PC side closes it and returns to the flasher console.
+static void cmd_uart(void) {
+  Serial.println("uart: entering bootloader (BOOT low over reset), relaying UART0 at 38400");
+  ax_uart_boot_dance();
+  Serial1.begin(38400, SERIAL_8N1, kPinUartRxd, kPinUartTxd);
+  Serial.println("uart: relaying, send a lone Q to exit");
+  for (;;) {
+    if (Serial.available()) {
+      int c = Serial.read();
+      if (c == 'Q') {
+        Serial1.flush();
+        Serial1.end();
+        Serial.println("uart: relay closed");
+        return;
+      }
+      Serial1.write((uint8_t)c);
+    }
+    while (Serial1.available()) Serial.write(Serial1.read());
+    delay(1);
   }
 }
 
@@ -615,6 +658,10 @@ static void handle_line(char* line) {
   }
   if (strcmp(cmd, "scan") == 0) {
     cmd_scan();
+    return;
+  }
+  if (strcmp(cmd, "uart") == 0) {
+    cmd_uart();
     return;
   }
   Serial.println("unknown, help");
