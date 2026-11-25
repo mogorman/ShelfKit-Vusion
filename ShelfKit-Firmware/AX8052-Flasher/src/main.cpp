@@ -224,11 +224,22 @@ static void cmd_bridge(void) {
   }
   Serial1.write('R');               // run the flashed application
   delay(1200);                      // app boots and re-inits its UART @115200
-  // 4. switch the relay to the app baud, flush the 38400 backlog, announce
-  Serial1.end();
-  delay(20);
-  Serial1.begin(115200, SERIAL_8N1, kPinUartRxd, kPinUartTxd);
+  // 4. switch the relay to the app baud
+  Serial1.updateBaudRate(115200);
   while (Serial1.available()) Serial1.read();
+  // debug: hexdump the first bytes arriving at 115200 so we can see whether the
+  // app is actually speaking here (banner) or the line is stuck/garbage.
+  uint32_t dt = millis();
+  int hd = 0;
+  Serial.print("hex@115200: ");
+  while (hd < 64 && (millis() - dt) < 3000) {
+    if (Serial1.available()) {
+      Serial.printf("%02x ", (unsigned)Serial1.read());
+      hd++;
+    }
+  }
+  Serial.print("\ncount=");
+  Serial.println(hd);
   while (Serial.available()) Serial.read();
   Serial.println("bridge: transparent console<->UART0 @115200; reboot the ESP32 to leave");
   Serial.flush();
