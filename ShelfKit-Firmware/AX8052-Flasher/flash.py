@@ -208,6 +208,42 @@ def load_image(path, addr):
     return data
 
 
+def load_hex(path):
+    """Parse an Intel .hex into (bytes, base_addr) for the debug-port flash.
+
+    Builds a byte array over [low, high] filled with FF, placing each present
+    byte, so a sparse image (the bootloader is mostly FF) flashes the same as
+    its .bin would. Gaps flash as FF no-ops; erase first to clear stale bits.
+    """
+    if not os.path.isfile(path):
+        raise ValueError("hex file not found: %s" % path)
+    base = 0
+    data = {}
+    for raw in open(path, "r"):
+        raw = raw.strip()
+        if not raw.startswith(":"):
+            continue
+        b = bytes.fromhex(raw[1:])
+        n, addr, rtype = b[0], int.from_bytes(b[1:3], "big"), b[3]
+        payload = b[4:4 + n]
+        if rtype == 0:
+            for i in range(len(payload)):
+                data[base + addr + i] = payload[i]
+        elif rtype == 2:
+            base = int.from_bytes(payload, "big") << 16
+    if not data:
+        raise ValueError("empty hex: %s" % path)
+    lo, hi = min(data), max(data)
+    out = bytearray(b"\xFF" * (hi - lo + 1))
+    for a, v in data.items():
+        out[a - lo] = v
+    if lo + len(out) > 0x10000:
+        raise ValueError("hex exceeds code space")
+    if hi + 1 > CALIB:
+        raise ValueError("hex reaches the calibration page")
+    return out, lo
+
+
 def check_key(text):
     if not HEX_KEY.match(text):
         raise ValueError("key needs 16 hex digits")
@@ -388,8 +424,12 @@ def run_command(port, args):
         check_write_chunk(addr, args.hex)
         expect(port, "write %04X %s" % (addr, args.hex.upper()), 30, "write ok")
     elif cmd == "flash":
-        data = load_image(args.image, args.addr)
-        program(port, args.addr, data, args.steps, retries=getattr(args, "retries", 3))
+        if args.image.lower().endswith(".hex"):
+            data, addr = load_hex(args.image)
+        else:
+            data = load_image(args.image, args.addr)
+            addr = args.addr
+        program(port, addr, data, args.steps, retries=getattr(args, "retries", 3))
     elif cmd == "erase":
         expect(port, "erase", 90, "erase done")
     elif cmd == "pc":
