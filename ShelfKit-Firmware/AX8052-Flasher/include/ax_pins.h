@@ -15,9 +15,11 @@ static const int kPinDbgEn = 16;
 
 // Bootloader UART0 bridge: BOOT plus the console relay to the AX8052. Wire these
 // only to use the `uart` command; the debug-port paths above do not need them.
-static const int kPinBoot = 21;
-static const int kPinUartTxd = 17;
-static const int kPinUartRxd = 18;
+// TX/RX ride the board's UART0 header (43/44), free because the console is
+// USB-CDC; BOOT uses 36, free on this quad-PSRAM board (octal would take 33-37).
+static const int kPinBoot = 36;
+static const int kPinUartTxd = 43;
+static const int kPinUartRxd = 44;
 
 // Half-period of DBG_CLK. The link is synchronous. 4 us per half (125 kHz) leaves
 // sampling margin for the tag wiring; 2 us (250 kHz) glitched on real boards.

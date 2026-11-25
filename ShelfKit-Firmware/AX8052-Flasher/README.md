@@ -132,7 +132,7 @@ GPIO5 and GPIO7 are reserved for a 74LVC1G125, if that buffer is fitted between 
 
 The clock idles low. Each half of the clock is 2 µs. The data bit is set while the clock is low, and the rising edge clocks it into the AX8052. The ESP32 samples the line at the end of the low half.
 
-Leave the ESP32 strap pins 0, 3, 45, and 46 alone, and leave USB (19, 20), the module flash (26–32), octal PSRAM (33–37), and UART0 (43, 44) alone.
+Leave the ESP32 strap pins 0, 3, 45, and 46 alone, and leave USB (19, 20) and the module flash (26–32) alone. The console is USB-CDC, so the UART0 header (43, 44) is free and is used by the optional `uart` bridge above. On this quad-PSRAM board GPIO 33–37 are free; the bridge uses 36 for BOOT.
 
 ### Optional UART0 bootloader bridge
 
@@ -140,9 +140,9 @@ The debug port programs the chip directly. The tag and hub builds ship as `.hex`
 
 ```
     ESP32-S3                         AX8052F143
-    GPIO21  BOOT    --------------  pin 21  PB3      boot select
-    GPIO18  TX      --------------  pin 22  PB4      bootloader UART TX
-    GPIO17  RX      --------------  pin 23  PB5      bootloader UART RX
+    GPIO36  BOOT    --------------  pin 21  PB3      boot select
+    GPIO43  TX      --------------  pin 22  PB4      bootloader UART TX
+    GPIO44  RX      --------------  pin 23  PB5      bootloader UART RX
 ```
 
 `uart` enters the bootloader (BOOT low over a reset pulse), relays the console to the chip's UART0 at 38400, and exits on a lone `Q`. `flash.py COM5 uart firmware.hex` drives the whole bootloader sequence (`?`, `K`, the hex lines, `R`) through that relay in one connection. The chip must already hold the bootloader; a blank chip is programmed over the debug port first.
