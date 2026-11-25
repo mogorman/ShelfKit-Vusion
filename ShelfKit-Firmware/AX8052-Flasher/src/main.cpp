@@ -133,9 +133,10 @@ static void cmd_scan(void) {
   }
 }
 
-// Enter the AX8052 bootloader: hold BOOT (PB3) LOW over a reset pulse. The chip
-// runs the app only when BOOT is HIGH at reset, so it must be LOW on the rising
-// RESET_N edge to boot into the bootloader instead.
+// Enter the AX8052 bootloader: hold BOOT (PB3) LOW over a reset pulse and KEEP
+// IT LOW afterwards. The bootloader runs first either way, but it only jumps to
+// a valid app when BOOT reads HIGH in its main loop - so releasing BOOT high let
+// a flashed app steal the reset and the banner never appeared.
 static void ax_uart_boot_dance(void) {
   pinMode(kPinBoot, OUTPUT);
   pinMode(kPinResetN, OUTPUT);
@@ -147,7 +148,7 @@ static void ax_uart_boot_dance(void) {
   delay(20);
   digitalWrite(kPinResetN, 1);  // release -> chip samples BOOT=low -> bootloader
   delay(20);
-  digitalWrite(kPinBoot, 1);    // release BOOT high (app state)
+  digitalWrite(kPinBoot, 0);    // keep BOOT low -> stay in the bootloader
   pinMode(kPinBoot, INPUT);
   pinMode(kPinResetN, INPUT);
 }
