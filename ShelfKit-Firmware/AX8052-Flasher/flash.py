@@ -333,6 +333,29 @@ def _read_line(port, seconds):
     return buf
 
 
+def _wait_for_banner(port, seconds=12):
+    """Read until a line contains 'Bootloader', or the deadline passes.
+
+    The bootloader spends several seconds in its OTA check (three header reads
+    ~2 s apart) before it prints the banner, and prints the banner itself on
+    startup without being asked. So a short wait, or re-sending '?' (which re-
+    resets the chip), times out on the 'OTA ...' noise and never sees it.
+    Returns the matching line, or ''.
+    """
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        chunk = port.read_some()
+        if not chunk:
+            time.sleep(0.02)
+            continue
+        text = chunk.decode("ascii", "replace")
+        sys.stdout.write(text if text.endswith("\n") else text + "\n")
+        for line in text.splitlines():
+            if "Bootloader" in line:
+                return line
+    return ""
+
+
 def uart_flash(port, hex_path, line_delay=0.01):
     """Flash a .hex file through the ESP32 UART0 bridge.
 
@@ -350,16 +373,7 @@ def uart_flash(port, hex_path, line_delay=0.01):
 
     _relay_enter(port)
     try:
-        banner = ""
-        for _ in range(3):
-            port.write("?")
-            banner = _read_line(port, 3)
-            if banner:
-                sys.stdout.write(banner)
-                if not banner.endswith("\n"):
-                    sys.stdout.write("\n")
-            if "Bootloader" in banner:
-                break
+        banner = _wait_for_banner(port, 12)
         if "Bootloader" not in banner:
             raise RuntimeError("no bootloader banner (chip not in boot mode, or TX not wired back)")
         port.write("K")
@@ -390,15 +404,7 @@ def uart_probe(port):
     """
     _relay_enter(port)
     try:
-        banner = ""
-        for _ in range(3):
-            port.write("?")
-            line = _read_line(port, 3)
-            if line:
-                sys.stdout.write(line if line.endswith("\n") else line + "\n")
-            if "Bootloader" in line:
-                banner = line
-                break
+        banner = _wait_for_banner(port, 12)
         if "Bootloader" not in banner:
             raise RuntimeError("no bootloader banner (check the PB3/PB4/PB5 wiring, or the chip has no bootloader yet)")
         print("banner OK -- chip is in the bootloader")
