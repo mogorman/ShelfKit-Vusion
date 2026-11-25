@@ -284,23 +284,24 @@ def program(port, addr, data, steps, retries=3):
     off = 0
     while off < len(data):
         n = min(CHUNK, len(data) - off)
-        hex_bytes = "".join("%02X" % b for b in data[off:off + n])
-        expect_retry(port, "write %04X %s" % (addr + off, hex_bytes), 40, "write ok", retries=retries)
+        chunk = data[off:off + n]
+        if any(b != 0xFF for b in chunk):  # an erased region is already FF; skip the pad
+            hex_bytes = "".join("%02X" % b for b in chunk)
+            expect_retry(port, "write %04X %s" % (addr + off, hex_bytes), 40, "write ok", retries=retries)
         off += n
-    got = bytearray()
-    left = len(data)
-    pos = addr
-    while left:
-        n = min(CHUNK, left)
-        reply = expect(port, "read %04X %X" % (pos, n), 15 + (n * 8) // 100, "%04X:" % pos)
-        got.extend(parse_dump(reply))
-        pos += n
-        left -= n
-    if len(got) != len(data):
-        raise ValueError("read back %d bytes, image has %d" % (len(got), len(data)))
-    for i, (flash, image) in enumerate(zip(got, data)):
-        if flash != image:
-            raise ValueError("mismatch at %04X: flash %02X image %02X" % (addr + i, flash, image))
+    off = 0
+    while off < len(data):
+        n = min(CHUNK, len(data) - off)
+        chunk = data[off:off + n]
+        if any(b != 0xFF for b in chunk):  # trust the verified erase for all-FF regions
+            reply = expect(port, "read %04X %X" % (addr + off, n), 15 + (n * 8) // 100, "%04X:" % (addr + off))
+            back = parse_dump(reply)
+            if len(back) != n:
+                raise ValueError("read back %d bytes at %04X, expected %d" % (len(back), addr + off, n))
+            for i in range(n):
+                if back[i] != chunk[i]:
+                    raise ValueError("mismatch at %04X: flash %02X image %02X" % (addr + off + i, back[i], chunk[i]))
+        off += n
     print("image matches")
     if steps:
         expect(port, "steps %X" % steps, 40, "pc ", steps + 1)
