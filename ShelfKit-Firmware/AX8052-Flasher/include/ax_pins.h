@@ -13,9 +13,9 @@ static const int kPinOe = 7;
 static const int kPinResetN = 15;
 static const int kPinDbgEn = 16;
 
-// Half-period of DBG_CLK. The link is synchronous. Two microseconds
-// per half is enough.
-static const int kClockHalfUs = 2;
+// Half-period of DBG_CLK. The link is synchronous. 4 us per half (125 kHz) leaves
+// sampling margin for the tag wiring; 2 us (250 kHz) glitched on real boards.
+static const int kClockHalfUs = 4;
 
 // Active-low OE: released driver -> pin high, driving -> pin low.
 inline int ax_oe_pin_level(int release) { return release ? 1 : 0; }
