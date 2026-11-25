@@ -202,15 +202,18 @@ static void cmd_bridge(void) {
   digitalWrite(kPinBoot, 1);      // app state, not bootloader
   pinMode(kPinResetN, OUTPUT);
   digitalWrite(kPinResetN, 1);    // reset released
-  delay(50);
-  digitalWrite(kPinResetN, 0);    // pulse the hub's reset so it comes up in the app
-  delay(20);
-  digitalWrite(kPinResetN, 1);    // (BOOT high -> application, not the bootloader)
-  delay(50);
   Serial.println("bridge: transparent console<->UART0 @115200; reboot the ESP32 to leave");
   Serial.flush();
-  Serial1.begin(115200, SERIAL_8N1, kPinUartRxd, kPinUartTxd);
-  while (Serial.available()) Serial.read();  // drop queued console bytes
+  Serial1.begin(115200, SERIAL_8N1, kPinUartRxd, kPinUartTxd);  // relay live FIRST
+  while (Serial.available()) Serial.read();
+  // Reset the hub only now, so its boot banner comes out while the relay is
+  // already running and the console sees the application start. (Resetting first
+  // lost the banner: it printed before Serial1 was up, and the app is quiet until
+  // a tag polls.)
+  digitalWrite(kPinResetN, 0);    // reset the hub -> comes up in the app (BOOT high)
+  delay(20);
+  digitalWrite(kPinResetN, 1);
+  delay(100);                     // let it start printing
   for (;;) {
     if (Serial.available()) Serial1.write((uint8_t)Serial.read());
     if (Serial1.available()) Serial.write((uint8_t)Serial1.read());
