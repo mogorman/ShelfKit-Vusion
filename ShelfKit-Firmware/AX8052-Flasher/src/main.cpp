@@ -223,23 +223,12 @@ static void cmd_bridge(void) {
     delay(1);
   }
   Serial1.write('R');               // run the flashed application
-  delay(1200);                      // app boots and re-inits its UART @115200
-  // 4. switch the relay to the app baud
+  delay(300);                       // app inits its UART @115200 (shelfhw_init)
+  // 4. switch the relay to the app baud and drop the 38400 "OK run" ack. The
+  //    app's boot banner already fired (one-shot) during the switch; the host
+  //    re-requests it with 'V'. The app is now idle at 115200, answering P/V.
   Serial1.updateBaudRate(115200);
   while (Serial1.available()) Serial1.read();
-  // debug: hexdump the first bytes arriving at 115200 so we can see whether the
-  // app is actually speaking here (banner) or the line is stuck/garbage.
-  uint32_t dt = millis();
-  int hd = 0;
-  Serial.print("hex@115200: ");
-  while (hd < 64 && (millis() - dt) < 3000) {
-    if (Serial1.available()) {
-      Serial.printf("%02x ", (unsigned)Serial1.read());
-      hd++;
-    }
-  }
-  Serial.print("\ncount=");
-  Serial.println(hd);
   while (Serial.available()) Serial.read();
   Serial.println("bridge: transparent console<->UART0 @115200; reboot the ESP32 to leave");
   Serial.flush();
