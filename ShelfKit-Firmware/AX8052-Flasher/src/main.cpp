@@ -202,6 +202,11 @@ static void cmd_bridge(void) {
   digitalWrite(kPinBoot, 1);      // app state, not bootloader
   pinMode(kPinResetN, OUTPUT);
   digitalWrite(kPinResetN, 1);    // reset released
+  delay(50);
+  digitalWrite(kPinResetN, 0);    // pulse the hub's reset so it comes up in the app
+  delay(20);
+  digitalWrite(kPinResetN, 1);    // (BOOT high -> application, not the bootloader)
+  delay(50);
   Serial.println("bridge: transparent console<->UART0 @115200; reboot the ESP32 to leave");
   Serial.flush();
   Serial1.begin(115200, SERIAL_8N1, kPinUartRxd, kPinUartTxd);

@@ -874,18 +874,26 @@ class App:
     def _send_bridge(self, key: str) -> None:
         """Put the ESP32 hub link into transparent bridge mode.
 
-        The ESP32 sits at its flasher console; 'bridge' makes it relay this port
-        to the hub's UART0 at 115200 until the ESP32 is rebooted. Sent once at
-        startup, not on every reopen - a second send would pipe stray bytes to
-        the hub.
+        Opening the port resets the ESP32, so its console is still booting when we
+        first write; a 'bridge' sent then is lost. We resend until the relay's own
+        ack ('bridge: transparent') shows up in this pane's log, then stop - a
+        resend after the ack would pipe stray bytes to the hub. Stays bridged
+        until the ESP32 is rebooted.
         """
         pane = self.panes.get(key)
         if pane is None or not pane.worker.is_open:
             return
-        self.note(key, "# sending 'bridge' to the ESP32 hub link")
-        pane.worker.write(b"bridge\n")
-        time.sleep(0.5)          # let the ESP32 drop into the transparent relay
-        self.note(key, "# hub bridge active; reboot the ESP32 to leave it")
+        base = pane.seq
+        deadline = time.monotonic() + 12.0
+        self.note(key, "# entering hub bridge (waiting for the ESP32 console)")
+        while time.monotonic() < deadline:
+            if any("bridge: transparent" in text for seq, _a, _s, text in pane.log
+                   if seq > base):
+                self.note(key, "# hub bridge active; reboot the ESP32 to leave it")
+                return
+            pane.worker.write(b"bridge\n")
+            time.sleep(1.0)
+        self.note(key, "# hub bridge not confirmed; check the ESP32 is flashing")
 
     def close_pane(self, key: str) -> None:
         pane = self.panes.get(key)
