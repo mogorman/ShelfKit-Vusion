@@ -425,6 +425,24 @@ def uart_raw(port, seconds=9):
         _relay_exit(port)
 
 
+def uart_bridge(port, seconds=10):
+    """Send 'bridge' to the ESP32 (boots the hub APP, BOOT high) and dump raw.
+
+    The bridge has no exit command - it runs until the ESP32 reboots. Reopening
+    the port resets the ESP32 back to the console, so this is self-recovering.
+    Diagnostic: shows whether the hub actually boots the app (banner at 115200).
+    """
+    print(">> bridge")
+    port.write("bridge\n")
+    time.sleep(0.4)  # let the ESP32 enter the bridge and reset the hub
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        d = port.read_some()
+        if d:
+            sys.stdout.write(d.decode("latin1"))
+            sys.stdout.flush()
+
+
 def run_command(port, args):
     cmd = args.cmd
     if cmd == "help":
@@ -482,6 +500,8 @@ def run_command(port, args):
         uart_probe(port)
     elif cmd == "raw":
         uart_raw(port, getattr(args, "seconds", 9))
+    elif cmd == "bridge":
+        uart_bridge(port, getattr(args, "seconds", 10))
     else:
         raise ValueError("unknown command %s" % cmd)
 
@@ -527,6 +547,8 @@ def build_parser():
     sub.add_parser("probe", help="enter the UART bridge, print the bootloader banner, exit (no flash)")
     raw = sub.add_parser("raw", help="enter the UART bridge and dump raw bytes (diagnostic)")
     raw.add_argument("--seconds", default=9, type=int, help="how long to capture (default 9)")
+    br = sub.add_parser("bridge", help="boot the hub app and dump raw bytes (diagnostic)")
+    br.add_argument("--seconds", default=10, type=int, help="how long to capture (default 10)")
 
     sub.add_parser("erase", help="secure-erase the main flash and the debug key")
     sub.add_parser("pc", help="print the program counter")
