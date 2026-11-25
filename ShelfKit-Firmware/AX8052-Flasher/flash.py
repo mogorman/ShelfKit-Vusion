@@ -171,6 +171,27 @@ def expect(port, cmd, seconds, needle, count=1):
     return transact(port, cmd, seconds, done)
 
 
+def expect_retry(port, cmd, seconds, needle, count=1, retries=3):
+    """expect(), re-sent after a stall or link error.
+
+    A timed-out or desynced chunk is safe to repeat: the ESP32 re-enters debug and
+    re-unlocks on every write, and the final read-back still has to match. The settle
+    delay lets a brown-out reboot finish re-bannering before the next attempt.
+    """
+    attempt = 0
+    while True:
+        try:
+            return expect(port, cmd, seconds, needle, count)
+        except (TimeoutError, RuntimeError) as exc:
+            attempt += 1
+            if attempt > retries:
+                raise
+            reason = "timeout" if isinstance(exc, TimeoutError) else str(exc)
+            print("  retry %d/%d after %s" % (attempt, retries, reason))
+            time.sleep(2.0)
+            drain(port)
+
+
 def load_image(path, addr):
     with open(path, "rb") as fh:
         data = bytearray(fh.read())
@@ -220,13 +241,13 @@ def read_memory(port, addr, length, out_path):
     return data
 
 
-def program(port, addr, data, steps):
-    expect(port, "unlock", 20, "unlocked 1")
+def program(port, addr, data, steps, retries=3):
+    expect_retry(port, "unlock", 20, "unlocked 1", retries=retries)
     off = 0
     while off < len(data):
         n = min(CHUNK, len(data) - off)
         hex_bytes = "".join("%02X" % b for b in data[off:off + n])
-        expect(port, "write %04X %s" % (addr + off, hex_bytes), 30, "write ok")
+        expect_retry(port, "write %04X %s" % (addr + off, hex_bytes), 40, "write ok", retries=retries)
         off += n
     got = bytearray()
     left = len(data)
@@ -267,7 +288,7 @@ def run_command(port, args):
         expect(port, "write %04X %s" % (addr, args.hex.upper()), 30, "write ok")
     elif cmd == "flash":
         data = load_image(args.image, args.addr)
-        program(port, args.addr, data, args.steps)
+        program(port, args.addr, data, args.steps, retries=getattr(args, "retries", 3))
     elif cmd == "erase":
         expect(port, "erase", 90, "erase done")
     elif cmd == "pc":
@@ -329,6 +350,8 @@ def build_parser():
     image.add_argument("image", help="firmware file")
     image.add_argument("--addr", default="0", type=parse_number, help="start address, decimal or 0x hex")
     image.add_argument("--steps", default=0, type=int, help="after a match, step the core 1..16 times")
+    image.add_argument("--retries", default=3, type=int,
+                       help="re-send a timed-out or failed chunk this many times (default 3)")
 
     sub.add_parser("erase", help="secure-erase the main flash and the debug key")
     sub.add_parser("pc", help="print the program counter")
