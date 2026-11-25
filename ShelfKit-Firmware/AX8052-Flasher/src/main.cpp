@@ -229,6 +229,20 @@ static void cmd_bridge(void) {
   //    re-requests it with 'V'. The app is now idle at 115200, answering P/V.
   Serial1.updateBaudRate(115200);
   while (Serial1.available()) Serial1.read();
+  // self-test: the ESP32 itself drives 'P' and hexdumps the app's reply, so the
+  // relay's TX+RX at 115200 are checked with no USB/Python in between.
+  Serial1.write('P');
+  delay(400);
+  Serial.print("selftest P -> ");
+  uint32_t dt = millis();
+  int hd = 0;
+  while (hd < 24 && (millis() - dt) < 1500) {
+    if (Serial1.available()) {
+      Serial.printf("%02x ", (unsigned)Serial1.read());
+      hd++;
+    }
+  }
+  Serial.println();
   while (Serial.available()) Serial.read();
   Serial.println("bridge: transparent console<->UART0 @115200; reboot the ESP32 to leave");
   Serial.flush();
